@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import CardSwap, { Card } from '../components/CardSwap';
 import CountUp from '../components/CountUp';
+import Header from '../components/Header';
 
 export default function Home() {
   const games = [
@@ -43,32 +44,7 @@ export default function Home() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="border-b border-green-900/30 backdrop-blur-sm bg-black/30">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 rounded-lg overflow-hidden">
-                <img 
-                  src="/LineraBet.png" 
-                  alt="LineraBet Logo" 
-                  width={40} 
-                  height={40}
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
-                LineraBet
-              </span>
-            </div>
-            <nav className="hidden md:flex space-x-8">
-              <a href="#" className="hover:text-green-400 transition-colors">Games</a>
-              <a href="#" className="hover:text-green-400 transition-colors">About</a>
-              <a href="#" className="hover:text-green-400 transition-colors">Rewards</a>
-            </nav>
-            <button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 px-6 py-2 rounded-lg font-semibold transition-all transform hover:scale-105">
-              Connect Wallet
-            </button>
-          </div>
-        </header>
+        <Header />
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-6 flex-1 flex items-center">
