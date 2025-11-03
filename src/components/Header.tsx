@@ -1,18 +1,39 @@
 import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
-import { useDarkMode } from '../lib/useDarkMode';
 
 function Header() {
-  const { isDarkMode } = useDarkMode();
-
   return (
-    <div className="header">
-      <img className="logo" src={isDarkMode ? "/logo-light.png" : "/logo-dark.png"} alt="dynamic" />
-      <div className="header-buttons">
-        <DynamicWidget />
+    <header className="border-b border-green-900/30 backdrop-blur-sm bg-black/30">
+      <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        {/* Logo */}
+        <div className="flex items-center space-x-2">
+          <div className="w-10 h-10 rounded-lg overflow-hidden">
+            <img 
+              src="/LineraBet.png" 
+              alt="LineraBet Logo" 
+              width={40} 
+              height={40}
+              className="object-cover"
+            />
+          </div>
+          <span className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
+            LineraBet
+          </span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="hidden md:flex space-x-8">
+          <a href="#" className="hover:text-green-400 transition-colors">Games</a>
+          <a href="#" className="hover:text-green-400 transition-colors">About</a>
+          <a href="#" className="hover:text-green-400 transition-colors">Rewards</a>
+        </nav>
+
+        {/* Connect Wallet Button with DynamicWidget */}
+        <div className="dynamic-widget-wrapper">
+          <DynamicWidget />
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
 
 export default Header;
-
