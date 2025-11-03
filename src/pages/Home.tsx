@@ -27,7 +27,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden relative">
+    <div className="h-screen bg-black text-white overflow-hidden relative flex flex-col">
       {/* Animated Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-green-950 opacity-80"></div>
       
@@ -71,30 +71,30 @@ export default function Home() {
         </header>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-6 py-12 md:py-20">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+        <main className="max-w-7xl mx-auto px-6 flex-1 flex items-center">
+          <div className="grid md:grid-cols-2 gap-8 items-center w-full">
             {/* Left Side - Hero Content */}
             <div className="space-y-8 max-md:text-center">
               <div className="inline-block px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-full">
-                <span className="text-green-400 text-sm font-semibold">Web3 Gaming Platform</span>
+                <span className="text-green-400 text-sm font-semibold tracking-wide">Web3 Gaming Platform</span>
               </div>
               
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight">
                 Play, Win,{' '}
                 <span className="bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
                   Earn
                 </span>
               </h1>
               
-              <p className="text-xl text-gray-400 max-w-lg max-md:mx-auto">
+              <p className="text-xl text-gray-400 max-w-lg max-md:mx-auto leading-relaxed">
                 Experience the future of online gaming with provably fair games, instant payouts, 
                 and complete transparency on the blockchain.
               </p>
 
               {/* Buttons and Stats Section */}
-              <div className="space-y-10">
+              <div className="space-y-10 mt-6">
                 {/* Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 max-md:justify-center">
+                <div className="flex flex-col sm:flex-row gap-4 max-md:justify-center mt-2">
                   <Link to="/blackjack">
                     <button className="px-8 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-lg font-bold text-lg transition-all transform hover:scale-105 shadow-lg shadow-green-500/30">
                       Start Playing
@@ -130,7 +130,7 @@ export default function Home() {
             </div>
 
             {/* Right Side - CardSwap Component */}
-            <div className="relative h-[700px] md:h-[800px] w-full -mt-110">
+            <div className="relative h-[600px] w-full flex items-center justify-center">
               <CardSwap
                 width={480}
                 height={420}
