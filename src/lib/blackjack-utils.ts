@@ -86,3 +86,34 @@ export const determineWinner = (
   }
 };
 
+/**
+ * Get the numeric value of a card (for comparing splits)
+ * Face cards all count as 10
+ */
+export const getCardNumericValue = (card: BlackjackCard): number => {
+  if (card.value === 'ace') {
+    return 11;
+  } else if (['jack', 'queen', 'king'].includes(card.value as string)) {
+    return 10;
+  } else {
+    return card.value as number;
+  }
+};
+
+/**
+ * Check if a hand can be split
+ * A hand can be split if it has exactly 2 cards with the same value
+ */
+export const canSplit = (cards: BlackjackCard[]): boolean => {
+  if (cards.length !== 2) return false;
+  return getCardNumericValue(cards[0]) === getCardNumericValue(cards[1]);
+};
+
+/**
+ * Check if double down is available
+ * Double down is only available on the initial 2-card hand
+ */
+export const canDoubleDown = (cards: BlackjackCard[]): boolean => {
+  return cards.length === 2;
+};
+
