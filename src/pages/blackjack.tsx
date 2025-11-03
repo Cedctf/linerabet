@@ -341,9 +341,7 @@ export default function Blackjack() {
                     <div key={`${card.id}-${index}`} className="transform hover:scale-105 transition-transform">
                       {index === 1 && !showDealerHoleCard ? (
                         // Show card back for hole card
-                        <div className="w-[90px] h-[126px] bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg border-2 border-white flex items-center justify-center">
-                          <div className="text-white text-4xl">🂠</div>
-                        </div>
+                        <div className="w-[90px] h-[126px] bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg border-2 border-white"></div>
                       ) : (
                         <Card suit={card.suit} value={card.value} width={90} height={126} />
                       )}
