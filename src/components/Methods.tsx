@@ -1,158 +1,191 @@
-import { useState, useEffect } from 'react';
-import { useDynamicContext, useIsLoggedIn, useUserWallets } from "@dynamic-labs/sdk-react-core";
-import { isEthereumWallet } from '@dynamic-labs/ethereum';
+import { useState, useEffect, useRef } from "react";
+import { useDynamicContext, useIsLoggedIn } from "@dynamic-labs/sdk-react-core";
+import { lineraAdapter, type LineraProvider } from "../lib/linera-adapter";
 
-import './Methods.css';
+import "./Methods.css";
 
-export default function DynamicMethods({ isDarkMode }: { isDarkMode: boolean }) {
-	const isLoggedIn = useIsLoggedIn();
-	const { sdkHasLoaded, primaryWallet, user } = useDynamicContext();
-	const userWallets = useUserWallets();
-	const [isLoading, setIsLoading] = useState(true);
-	const [result, setResult] = useState<undefined | string>(undefined);
-	const [error, setError] = useState<string | null>(null);
+interface DynamicMethodsProps {
+  isDarkMode: boolean;
+}
 
-	const safeStringify = (obj: unknown): string => {
-		const seen = new WeakSet();
-		return JSON.stringify(obj, (key, value) => {
-			if (typeof value === 'object' && value !== null) {
-				if (seen.has(value)) {
-					return '[Circular]';
-				}
-				seen.add(value);
-			}
-			return value;
-		}, 2);
-	};
+interface Block {
+  height: number;
+  hash: string;
+  event_stream: unknown;
+}
 
-	useEffect(() => {
-		if (sdkHasLoaded && isLoggedIn && primaryWallet) {
-			setIsLoading(false);
-		} else {
-			setIsLoading(true);
-		}
-	}, [sdkHasLoaded, isLoggedIn, primaryWallet]);
+export default function DynamicMethods({ isDarkMode }: DynamicMethodsProps) {
+  const { sdkHasLoaded, primaryWallet } = useDynamicContext();
+  const isLoggedIn = useIsLoggedIn();
 
-	function clearResult() {
-		setResult(undefined);
-		setError(null);
-	}
+  const [isLoading, setIsLoading] = useState(true);
+  const [result, setResult] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-	function showUser() {
-		try {
-			setError(null);
-			setResult(safeStringify(user));
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to stringify user data');
-			setResult(undefined);
-		}
-	}
+  const providerRef = useRef<LineraProvider | null>(null);
+  const [chainConnected, setChainConnected] = useState<boolean>(
+    lineraAdapter.isChainConnected()
+  );
+  const [appConnected, setAppConnected] = useState(false);
 
-	function showUserWallets() {
-		try {
-			setError(null);
-			setResult(safeStringify(userWallets));
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to stringify wallet data');
-			setResult(undefined);
-		}
-	}
+  const [count, setCount] = useState<number>(0);
+  const [blocks, setBlocks] = useState<Block[]>([]);
 
-	
-  async function fetchEthereumPublicClient() {
-    if (!primaryWallet || !isEthereumWallet(primaryWallet)) return;
-    try {
-      setIsLoading(true);
-      setError(null);
-      const result = await primaryWallet.getPublicClient();
-      setResult(safeStringify(result));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unknown error occurred');
-      setResult(undefined);
-    } finally {
+  useEffect(() => {
+    if (sdkHasLoaded && isLoggedIn && primaryWallet) {
       setIsLoading(false);
+      // Auto-connect to Linera when wallet is connected
+      if (!chainConnected) {
+        handleConnect();
+      }
+    } else {
+      setIsLoading(true);
+    }
+  }, [sdkHasLoaded, isLoggedIn, primaryWallet]);
+
+  useEffect(() => {
+    setChainConnected(lineraAdapter.isChainConnected());
+    setAppConnected(lineraAdapter.isApplicationSet());
+  }, []);
+
+  async function handleConnect() {
+    try {
+      setError(null);
+
+      if (!primaryWallet) {
+        setError("Please connect your Dynamic wallet first");
+        return;
+      }
+
+      const provider = await lineraAdapter.connect(primaryWallet);
+      providerRef.current = provider;
+      setChainConnected(true);
+
+      setResult(
+        `Connected to Linera!\nAddress: ${provider.address}\nChain ID: ${provider.chainId}`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to connect to Linera"
+      );
     }
   }
 
-  async function fetchEthereumWalletClient() {
-    if (!primaryWallet || !isEthereumWallet(primaryWallet)) return;
-    try {
-      setIsLoading(true);
-      setError(null);
-      const result = await primaryWallet.getWalletClient();
-      setResult(safeStringify(result));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unknown error occurred');
-      setResult(undefined);
-    } finally {
-      setIsLoading(false);
-    }
+  // Subscribe to notifications when connected; cleanup on unmount or reconnect
+  useEffect(() => {
+    const provider = providerRef.current;
+    const client = provider?.client;
+    if (!client) return;
+
+    const handler = (notification: unknown) => {
+      const newBlock: Block | undefined = (
+        notification as { reason: { NewBlock: Block } }
+      )?.reason?.NewBlock;
+      if (!newBlock) return;
+      setBlocks((prev) => [...prev, newBlock]);
+      getCount();
+    };
+
+    client.onNotification(handler);
+    return () => client.onNotification(() => {});
+  }, [chainConnected]);
+
+  async function handleSetApplication() {
+    await lineraAdapter.setApplication();
+    await getCount();
+    setAppConnected(true);
   }
 
-  async function fetchEthereumMessage() {
-    if (!primaryWallet || !isEthereumWallet(primaryWallet)) return;
-    try {
-      setIsLoading(true);
-      setError(null);
-      const result = await primaryWallet.signMessage("Hello World");
-      setResult(safeStringify(result));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unknown error occurred');
-      setResult(undefined);
-    } finally {
-      setIsLoading(false);
-    }
+  async function getCount() {
+    const result = await lineraAdapter.queryApplication<{
+      data: { value: number };
+    }>({ query: "query { value }" });
+    setCount(result.data.value);
   }
 
-	return (
-		<>
-			{!isLoading && (
-				<div className="dynamic-methods" data-theme={isDarkMode ? 'dark' : 'light'}>
-					<div className="methods-container">
-						<button className="btn btn-primary" onClick={showUser}>Fetch User</button>
-						<button className="btn btn-primary" onClick={showUserWallets}>Fetch User Wallets</button>
+  async function incrementCount() {
+    await lineraAdapter.queryApplication({
+      query: "mutation { increment(value: 1) }",
+    });
+  }
 
-						{primaryWallet && isEthereumWallet(primaryWallet) && (
-		<>
-			
-      <button type="button" className="btn btn-primary" onClick={fetchEthereumPublicClient}>
-        Fetch PublicClient
-      </button>
+  return (
+    <>
+      {!isLoading && (
+        <div
+          className="dynamic-methods"
+          data-theme={isDarkMode ? "dark" : "light"}
+        >
+          <div className="methods-container">
+            <div className="card">
+              {chainConnected && appConnected && (
+                <div className="card-header">
+                  <h3 className="card-title">Count</h3>
+                  <div className="count-value">{count}</div>
+                </div>
+              )}
 
-      <button type="button" className="btn btn-primary" onClick={fetchEthereumWalletClient}>
-        Fetch WalletClient
-      </button>
+              {!chainConnected && (
+                <div className="button-row">
+                  <button className="btn btn-primary" onClick={handleConnect}>
+                    Connect to Linera
+                  </button>
+                </div>
+              )}
 
-      <button type="button" className="btn btn-primary" onClick={fetchEthereumMessage}>
-        Fetch Message
-      </button>
-		</>
-	)}
-					</div>
-					
-					{(result || error) && (
-						<div className="results-container">
-							{error ? (
-								<pre className="results-text error">{error}</pre>
-							) : (
-								<pre className="results-text">
-									{result && (
-										typeof result === "string" && result.startsWith("{")
-										? JSON.stringify(JSON.parse(result), null, 2)
-										: result
-									)}
-								</pre>
-							)}
-						</div>
-					)}
-					
-					{(result || error) && (
-						<div className="clear-container">
-							<button className="btn btn-primary" onClick={clearResult}>Clear</button>
-						</div>
-					)}
-				</div>
-			)}
-		</>
-	);
+              {chainConnected && !appConnected && (
+                <div className="button-row">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSetApplication}
+                  >
+                    Connect to App
+                  </button>
+                </div>
+              )}
+
+              {chainConnected && appConnected && (
+                <div className="button-row">
+                  <button className="btn btn-primary" onClick={getCount}>
+                    Get Count
+                  </button>
+                  <button className="btn btn-primary" onClick={incrementCount}>
+                    Increment Count
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
+            {(result || error) && (
+              <div className="results-container">
+                {error ? (
+                  <pre className="results-text error">{error}</pre>
+                ) : (
+                  <pre className="results-text">{result}</pre>
+                )}
+              </div>
+            )}
+            {blocks.length > 0 && (
+              <div className="results-container">
+                <h3 style={{ marginBottom: "10px" }}>Blocks</h3>
+                {blocks.map((block) => (
+                  <pre
+                    key={block.height}
+                    className="results-text"
+                    style={{ marginBottom: "10px" }}
+                  >
+                    <div>Height: {block.height}</div>
+                    <div>Hash: {block.hash}</div>
+                  </pre>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
