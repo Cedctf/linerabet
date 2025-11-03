@@ -1,6 +1,6 @@
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
 import { useDarkMode } from '../lib/useDarkMode';
 import DynamicMethods from '../components/Methods';
+import Header from '../components/Header';
 import "../App.css";
 
 function Home() {
@@ -8,16 +8,9 @@ function Home() {
 
   return (
     <div className={`container ${isDarkMode ? 'dark' : 'light'}`}>
-      <div className="header">
-        <img className="logo" src={isDarkMode ? "/logo-light.png" : "/logo-dark.png"} alt="dynamic" />
-        <div className="header-buttons">
-          <button className="docs-button" onClick={() => window.open('https://docs.dynamic.xyz', '_blank', 'noopener,noreferrer')}>Docs</button>
-          <button className="get-started" onClick={() => window.open('https://app.dynamic.xyz', '_blank', 'noopener,noreferrer')}>Get started</button>
-        </div>
-      </div>
+      <Header />
 
       <div className="modal">
-        <DynamicWidget />
         <DynamicMethods isDarkMode={isDarkMode} />
       </div>
 
