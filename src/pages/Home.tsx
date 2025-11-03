@@ -110,8 +110,8 @@ export default function Home() {
               <CardSwap
                 width={480}
                 height={420}
-                cardDistance={50}
-                verticalDistance={60}
+                cardDistance={40}
+                verticalDistance={30}
                 delay={3000}
                 pauseOnHover={true}
                 skewAmount={5}
