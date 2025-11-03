@@ -6,6 +6,7 @@ import initLinera, {
 } from "@linera/client";
 import type { Wallet as DynamicWallet } from "@dynamic-labs/sdk-react-core";
 import { DynamicSigner } from "./dynamic-signer";
+import { LINERA_RPC_URL, COUNTER_APP_ID } from "../constants";
 
 export interface LineraProvider {
   client: Client;
@@ -32,7 +33,7 @@ export class LineraAdapter {
 
   async connect(
     dynamicWallet: DynamicWallet,
-    rpcUrl: string
+    rpcUrl?: string
   ): Promise<LineraProvider> {
     if (this.provider) return this.provider;
     if (this.connectPromise) return this.connectPromise;
@@ -61,7 +62,7 @@ export class LineraAdapter {
           }
         }
 
-        const faucet = await new Faucet(rpcUrl);
+        const faucet = await new Faucet(rpcUrl || LINERA_RPC_URL);
         const wallet = await faucet.createWallet();
         const chainId = await faucet.claimChain(wallet, address);
 
@@ -76,7 +77,7 @@ export class LineraAdapter {
           chainId,
           address: dynamicWallet.address,
         };
-
+        console.log("🔄 Notifying connection state change (chain connected)");
         this.onConnectionChange?.();
         return this.provider;
       })();
@@ -95,17 +96,17 @@ export class LineraAdapter {
     }
   }
 
-  async setApplication(appId: string) {
+  async setApplication(appId?: string) {
     if (!this.provider) throw new Error("Not connected to Linera");
-    if (!appId) throw new Error("Application ID is required");
 
     const application = await this.provider.client
       .frontend()
-      .application(appId);
+      .application(appId || COUNTER_APP_ID);
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");
     this.application = application;
+    console.log("🔄 Notifying connection state change (app set)");
     this.onConnectionChange?.();
   }
 
@@ -165,4 +166,3 @@ export class LineraAdapter {
 
 // Export singleton instance
 export const lineraAdapter = LineraAdapter.getInstance();
-
