@@ -430,3 +430,75 @@ linera service --port 8080
 ---
 
 
+## Frontends, Wallets & Signing (FAQ)
+
+### Is the frontend just querying GraphQL?
+
+Yes. Your frontend (React/TS, etc.) typically talks **only** to the node service’s **GraphQL endpoints**:
+
+* **System API** at `http://localhost:8080` (GraphiQL shows `QueryRoot`/`MutationRoot` for chain/system ops).
+* **Per‑application API** at `/chains/<chain-id>/applications/<application-id>` (the service you wrote).
+
+  * **Queries**: read‑only (free; non‑metered).
+  * **Mutations**: usually return **serialized operations** (bytes) via `schedule_operation` which the wallet later includes in a block.
+
+> Pattern: UI → app service GraphQL **mutation** → schedules an operation → wallet proposes a block containing that op → contract executes and changes state → UI reads new state via GraphQL **query**.
+
+**Minimal fetch example** (browser/Node):
+
+```ts
+async function gql(endpoint: string, query: string, variables?: any) {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query, variables })
+  });
+  const json = await res.json();
+  if (json.errors) throw new Error(JSON.stringify(json.errors));
+  return json.data;
+}
+
+// Read current value
+const data = await gql('http://localhost:8080/chains/<chain>/applications/<app>', `
+  query { value }
+`);
+
+// Schedule an increment operation (wallet will include it in the next block)
+await gql('http://localhost:8080/chains/<chain>/applications/<app>', `
+  mutation { increment(value: 5) }
+`);
+```
+
+### Which wallet should I use?
+
+* **During development**: use the **developer wallet** managed by the `linera` CLI. It stores keys locally (`wallet.json`, `keystore.json/db`) and runs the node service that your app’s frontend talks to.
+* **Production**: the goal is a **browser extension / mobile / hardware** wallet for end users. Until then, stick to the dev wallet for tests/devnets/testnets.
+
+**Multiple wallets/networks**: point the CLI to different files or set env vars:
+
+```bash
+export LINERA_WALLET=$PWD/dev-wallet.json
+export LINERA_KEYSTORE=$PWD/dev-keystore.json
+export LINERA_STORAGE=rocksdb:$PWD/dev-wallet.db
+```
+
+### How does signing work?
+
+Linera’s model is **block‑signing**, not transaction‑signing:
+
+* Your wallet (holding your private key) **signs the block** that extends your microchain.
+* All operations in that block inherit the signer’s authentication. If they emit messages, **auth can propagate** across chains (so you can prove you initiated cross‑chain actions).
+
+**Frontend flow with signing**
+
+1. Frontend calls your **service GraphQL mutation** (e.g., `increment`), which **schedules an operation** for your chain.
+2. Your **wallet/node** (the `linera` service you run) takes scheduled ops and **proposes a block**, signing it with your key.
+3. Validators confirm the block; the **contract** runs and updates state.
+4. Frontend **queries** the service to read the updated state.
+
+> On multi‑owner or public chains, the round configuration determines who can propose and when; the wallet coordinates this, still signing the block on behalf of the active proposer.
+
+**Security notes**
+
+* Keep your keystore private; never ship it to the browser. The browser talks to your *local* node service; the node does the signing.
+* For production UX, a browser wallet would approve op scheduling and block proposals similarly to how EVM wallets approve txs, but with Linera’s block model.
