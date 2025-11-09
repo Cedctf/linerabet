@@ -429,4 +429,4 @@ linera service --port 8080
 
 ---
 
-*Happy shipping on microchains!*
+
