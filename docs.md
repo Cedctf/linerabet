@@ -429,6 +429,9 @@ linera service --port 8080
 
 ---
 
+*Happy shipping on microchains!*
+
+---
 
 ## Frontends, Wallets & Signing (FAQ)
 
@@ -502,3 +505,134 @@ Linera’s model is **block‑signing**, not transaction‑signing:
 
 * Keep your keystore private; never ship it to the browser. The browser talks to your *local* node service; the node does the signing.
 * For production UX, a browser wallet would approve op scheduling and block proposals similarly to how EVM wallets approve txs, but with Linera’s block model.
+
+---
+
+## Identifying IDs & Endpoints
+
+**Chain ID (microchain)** vs **Application ID (app instance):**
+
+* The `linera publish-and-create` log line
+
+  > `Publishing and creating application on chain <CHAIN_ID>`
+  > shows your **CHAIN_ID**.
+* The **very last line** printed by `publish-and-create` is your **APPLICATION_ID**.
+* Re‑list apps anytime (system GraphQL at `/`):
+
+  ```graphql
+  query {
+    applications(chainId: "<CHAIN_ID>") { id description link }
+  }
+  ```
+* Per‑app endpoint combines both:
+
+  ```
+  http://localhost:8080/chains/<CHAIN_ID>/applications/<APPLICATION_ID>
+  ```
+
+## Base vs Per‑App GraphQL
+
+* **Base node UI**: `http://localhost:8080` → system queries (list apps, chains).
+* **Per‑app UI**: `.../chains/<CHAIN_ID>/applications/<APPLICATION_ID>` → your app’s schema.
+
+  * Here you run:
+
+    ```graphql
+    query { value }
+    mutation { increment(value: 5) }
+    ```
+
+## How a GraphQL Mutation Becomes a Signed Block
+
+1. Your per‑app **service** receives the mutation and calls `schedule_operation(...)`.
+2. The **local node/wallet** (the `linera service` process) enqueues the op for **your chain**.
+3. The wallet **proposes a block**, **signs** it with your key from the **keystore** and sends it to validators.
+4. Validators execute your **contract**; after confirmation, state changes. A follow‑up `query { value }` reflects the update.
+
+> Keys live locally (e.g., `~/.config/linera/keystore.json|.db`). Never expose them to the browser; the browser only talks to the local node service.
+
+### See it happen
+
+* Run with debug logs:
+
+  ```bash
+  RUST_LOG=linera=debug linera service --port 8080
+  ```
+* Watch chain metadata change:
+
+  ```bash
+  linera wallet show   # Next Block Height increments; Owner public key shown
+  ```
+
+## cURL Quickies
+
+```bash
+# Read
+curl -s 'http://localhost:8080/chains/<CHAIN_ID>/applications/<APP_ID>' \
+  -H 'content-type: application/json' \
+  -d '{"query":"query { value }"}'
+
+# Increment by 5 (schedules op; wallet signs the next block)
+curl -s 'http://localhost:8080/chains/<CHAIN_ID>/applications/<APP_ID>' \
+  -H 'content-type: application/json' \
+  -d '{"query":"mutation { increment(value: 5) }"}'
+```
+
+## Troubleshooting Validator/Network Errors
+
+**“The block timestamp is in the future.”**
+
+* Your local clock is ahead of validators’. Fix time sync:
+
+  * Windows host (WSL): Settings → Time & language → Date & time → **Sync now**, then `wsl --shutdown`.
+  * Linux: `sudo timedatectl set-ntp true`.
+
+**“Blobs not found: ChainDescription/ContractBytecode/ServiceBytecode”**
+
+* Validators haven’t fetched metadata yet or you’re on the wrong network/wallet files.
+
+  * Ensure the chain was created on this network (use faucet/init for the same testnet).
+  * `linera sync --chain <CHAIN_ID>`
+  * Re‑try after a moment; propagation is eventual.
+
+**“Cannot confirm a block before its predecessors: BlockHeight(0)”**
+
+* Validator can’t see earlier blocks or chain description; usually resolved by syncing/propagation.
+
+**“Unexpected epoch X: chain … is at Y”**
+
+* Your client’s view of epochs differs from validators (out of sync / version drift). Check `linera --version` and upgrade/downgrade to testnet‑compatible builds.
+
+**gRPC “dns error”**
+
+* Some endpoints are flaky/unreachable. A quorum is enough, but if combined with other issues it may fail; re‑run once the others are fixed.
+
+## Handy Diagnostics
+
+```bash
+# Confirm balance and connectivity
+linera sync --chain <CHAIN_ID>
+linera query-balance --chain <CHAIN_ID>
+
+# Check version vs testnet expectations
+linera --version
+
+# Inspect wallet/owners/chains
+linera wallet show
+```
+
+## Example: End‑to‑End Flow
+
+1. `linera service --port 8080`
+2. At `/` run:
+
+   ```graphql
+   query { applications(chainId: "<CHAIN_ID>") { id link } }
+   ```
+3. Open the `link` (per‑app UI) and run:
+
+   ```graphql
+   query { value }
+   mutation { increment(value: 5) }
+   query { value }
+   ```
