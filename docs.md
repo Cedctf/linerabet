@@ -307,6 +307,89 @@ This produces two Wasm artifacts: `*_contract.wasm` and `*_service.wasm`.
 
 ---
 
+## Project structure & file-by-file guide (Contract + Service)
+
+A Linera app compiles into **two Wasm binaries**: a **contract** (write, metered) and a **service** (read, GraphQL, non‑metered). They share a **library (ABI)** and a **state** module.
+
+### `src/state.rs` — Persistent state (Views)
+
+```rust
+#[derive(RootView, async_graphql::SimpleObject)]
+#[view(context = ViewStorageContext)]
+pub struct ContractsState {
+    pub value: RegisterView<u64>,
+}
+```
+
+* **What:** Your on‑chain data. Views provide a KV‑backed model (Register/Map/Log/Queue/Collection, etc.).
+* `RootView` enables `load(...)` / `save(...)` through the runtime.
+* `SimpleObject` lets you expose fields easily via GraphQL.
+
+### `src/lib.rs` — ABI & shared types
+
+```rust
+pub struct ContractsAbi;
+impl ContractAbi for ContractsAbi { type Operation = Operation; type Response = (); }
+impl ServiceAbi  for ContractsAbi { type Query = Request;  type QueryResponse = Response; }
+
+#[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
+pub enum Operation { Increment { value: u64 }, }
+```
+
+* **What:** The “language” the contract/service speak.
+* `Operation` = business ops; `GraphQLMutationRoot` auto‑derives a GraphQL **Mutation** tree that will **schedule operations** when called from the service.
+
+### `src/contract.rs` — Contract binary (state‑changing)
+
+```rust
+pub struct ContractsContract { state: ContractsState, runtime: ContractRuntime<Self> }
+linera_sdk::contract!(ContractsContract);
+impl WithContractAbi for ContractsContract { type Abi = contracts::ContractsAbi; }
+impl Contract for ContractsContract {
+  type Message = (); type Parameters = (); type InstantiationArgument = u64; type EventValue = ();
+  async fn load(rt: ContractRuntime<Self>) -> Self { let state = ContractsState::load(rt.root_view_storage_context()).await?; Self { state, runtime: rt } }
+  async fn instantiate(&mut self, init: u64) { self.runtime.application_parameters(); self.state.value.set(init); }
+  async fn execute_operation(&mut self, op: Operation) -> () { if let Operation::Increment{value} = op { self.state.value.set(self.state.value.get()+value); } }
+  async fn execute_message(&mut self, _: ()) {}
+  async fn store(self) { self.state.save().await?; }
+}
+```
+
+* **What:** Deterministic, metered logic validators run when a block includes your op.
+* Lifecycle: `load` → (maybe `instantiate`) → `execute_operation` / `execute_message` → `store`.
+* Tests use a **mock `ContractRuntime`** so you can unit‑test without a network.
+
+### `src/service.rs` — Service binary (GraphQL, read‑only)
+
+```rust
+pub struct ContractsService { state: ContractsState, runtime: Arc<ServiceRuntime<Self>> }
+linera_sdk::service!(ContractsService);
+impl WithServiceAbi for ContractsService { type Abi = contracts::ContractsAbi; }
+impl Service for ContractsService {
+  type Parameters = ();
+  async fn new(rt: ServiceRuntime<Self>) -> Self { let state = ContractsState::load(rt.root_view_storage_context()).await?; Self{ state, runtime: Arc::new(rt) } }
+  async fn handle_query(&self, q: Request) -> Response {
+    Schema::build(QueryRoot{ value:*self.state.value.get() }, Operation::mutation_root(self.runtime.clone()), EmptySubscription).finish().execute(q).await
+  }
+}
+#[Object] impl QueryRoot { async fn value(&self) -> &u64 { &self.value } }
+```
+
+* **What:** GraphQL API your frontend hits.
+* **Important:** `Operation::mutation_root(runtime)` wires GraphQL mutations to `runtime.schedule_operation(...)` — it **queues ops**, it does **not** mutate here.
+* Service tests use a **mock `ServiceRuntime`** to assert GraphQL JSON.
+
+### How a GraphQL mutation becomes a signed block
+
+1. Frontend calls per‑app GraphQL mutation (service) → schedules an **Operation**.
+2. Your local **wallet/node** (the `linera service` process) picks it up → **proposes & signs** a block for **your chain** (uses keys in your keystore).
+3. Validators execute the **contract** (`execute_operation`) and confirm state.
+4. Frontend queries again (`query { value }`) to read updated state.
+
+> Two artifacts after build: `*_contract.wasm` and `*_service.wasm`. `publish-and-create` uploads both (module) and **instantiates** an app (returns **Application ID**).
+
+---
+
 ## Deploying
 
 You can deploy to a **local net** or the **public testnet/devnet** using `publish-and-create`, which both publishes the bytecode and instantiates an application.
