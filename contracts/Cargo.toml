@@ -3,10 +3,18 @@ name = "contracts"
 version = "0.1.0"
 edition = "2021"
 
+# Build a library too (used by the two bins via `contracts::...`)
+[lib]
+name = "contracts"
+path = "src/lib.rs"
+
 [dependencies]
-async-graphql = { version = "=7.0.17", default-features = false }
+# Match your linera-sdk version
 linera-sdk = "0.15.4"
-futures = { version = "0.3 "}
+linera-views = "0.15.4"
+
+async-graphql = { version = "=7.0.17", default-features = false }
+futures = { version = "0.3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 
