@@ -1,12 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CardComp from "../components/Card";
 import Header from "../components/Header";
+import { BANKER_COMMISSION, type BaccaratBetOption, type BaccaratBetResult } from "../lib/baccarat";
 import {
-  BANKER_COMMISSION,
-  playBaccaratRound,
-  type BaccaratBetOption,
-  type BaccaratBetResult,
-} from "../lib/baccarat";
+  fetchBaccaratState,
+  placeBetAndDeal,
+  resetBaccaratRound,
+} from "../lib/baccarat-chain";
+
+type ChainCard = { id: string; suit: string; value: string };
+function normalizeBaccaratCards(cards: ChainCard[]) {
+  return cards.map((c) => {
+    const v = c.value.toLowerCase();
+    const pointValue =
+      v === "ace" ? 1 :
+      v === "jack" || v === "queen" || v === "king" ? 0 :
+      v === "10" ? 0 :
+      Number.isFinite(Number(v)) ? Number(v) : 0;
+    return { ...c, pointValue };
+  });
+}
 
 const INITIAL_BALANCE = 1000;
 const BET_AMOUNTS = [10, 25, 50, 100, 250, 500, 1000];
@@ -21,10 +34,11 @@ function formatNumber(value: number): string {
 }
 
 function renderOutcome(result: BaccaratBetResult): string {
-  if (result.pushed) return "Tie! Non-tie bets push.";
-  if (result.winner === "PLAYER") return "Player wins 🎉";
-  if (result.winner === "BANKER") return "Banker wins (5% commission taken)";
-  return "Tie hits! Massive payout 🎉";
+  const winnerLabel =
+    result.winner === "PLAYER" ? "Player" : result.winner === "BANKER" ? "Banker" : "Tie";
+  if (result.pushed) return `Winner: Tie — Your non‑tie bet pushes.`;
+  const youWin = result.winner === result.betType;
+  return youWin ? `Winner: ${winnerLabel} — You win 🎉` : `Winner: ${winnerLabel} — You lose`;
 }
 
 export default function BaccaratPage() {
@@ -94,7 +108,20 @@ export default function BaccaratPage() {
   const insufficientFunds = bet > balance;
   const invalidBet = bet <= 0;
 
-  function handleDeal() {
+  // Sync initial on-chain state on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await fetchBaccaratState();
+        setBalance(s.balance);
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load on-chain state");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleDeal() {
     if (invalidBet) {
       setError("Enter a bet greater than zero.");
       return;
@@ -106,11 +133,46 @@ export default function BaccaratPage() {
     setError(null);
     setBusy(true);
     try {
-      const result = playBaccaratRound(bet, betType);
-      // Establish the reveal order:
+      // call chain mutation
+      await placeBetAndDeal(bet, betType === "PLAYER" ? "Player" : betType === "BANKER" ? "Banker" : "Tie");
+      // fetch new state
+      const s = await fetchBaccaratState();
+      setBalance(s.balance);
+      // build a local round-like object for UI rendering from chain state
+      const last = s.lastResult;
+      const winnerUpper = last ? String(last.winner).toUpperCase() : "TIE";
+      const result: BaccaratBetResult = {
+        playerHand: normalizeBaccaratCards(s.playerHand as any) as any,
+        bankerHand: normalizeBaccaratCards(s.bankerHand as any) as any,
+        playerValue: last ? last.playerValue : 0,
+        bankerValue: last ? last.bankerValue : 0,
+        winner: winnerUpper === "PLAYER" ? "PLAYER" : winnerUpper === "BANKER" ? "BANKER" : "TIE",
+        isNatural: !!last?.isNatural,
+        playerThirdCardValue: (last?.playerThirdCardValue ?? null) as any,
+        bankerDrewThirdCard: !!last?.bankerDrewThirdCard,
+        betType,
+        betAmount: bet,
+        netProfit: last?.netProfit ?? 0,
+        commissionPaid: betType === "BANKER" && last && winnerUpper === "BANKER"
+          ? +(bet * BANKER_COMMISSION).toFixed(2)
+          : 0,
+        payoutMultiplier:
+          last && winnerUpper === "TIE" && betType === "TIE"
+            ? 8
+            : last && winnerUpper === "BANKER" && betType === "BANKER"
+            ? +(1 - BANKER_COMMISSION)
+            : last && winnerUpper === "PLAYER" && betType === "PLAYER"
+            ? 1
+            : last &&
+              winnerUpper !== (betType === "PLAYER" ? "PLAYER" : betType === "BANKER" ? "BANKER" : "TIE")
+            ? -1
+            : 0,
+        pushed: !!last?.pushed,
+      };
+      // Establish the reveal order using returned hands
       const order: ("PLAYER" | "BANKER")[] = ["PLAYER", "BANKER", "PLAYER", "BANKER"];
-      if (result.playerHand.length === 3) order.push("PLAYER"); // Player draws first if any
-      if (result.bankerHand.length === 3) order.push("BANKER"); // Then banker draws if any
+      if (result.playerHand.length === 3) order.push("PLAYER");
+      if (result.bankerHand.length === 3) order.push("BANKER");
 
       setRound(result);
       setDealOrder(order);
@@ -118,7 +180,6 @@ export default function BaccaratPage() {
       setIsDealing(true);
       setShowResults(false);
 
-      // Start timed reveal
       if (dealTimerRef.current) {
         window.clearInterval(dealTimerRef.current);
         dealTimerRef.current = null;
@@ -127,35 +188,43 @@ export default function BaccaratPage() {
         setRevealStep((prev) => {
           const next = prev + 1;
           if (next >= order.length) {
-            // Stop when all cards revealed
             if (dealTimerRef.current) {
               window.clearInterval(dealTimerRef.current);
               dealTimerRef.current = null;
             }
             setIsDealing(false);
             setShowResults(true);
-            // Apply balance once results are revealed
-            setBalance((prev) => Number((prev + result.netProfit).toFixed(2)));
+            // Chain already applied balance; just sync to chain in case of float rounding
+            setBalance(s.balance);
           }
           return next;
         });
       }, 500);
+    } catch (e: any) {
+      setError(e?.message ?? "Deal failed");
     } finally {
       setBusy(false);
     }
   }
 
-  function resetTable() {
+  async function resetTable() {
     if (dealTimerRef.current) {
       window.clearInterval(dealTimerRef.current);
       dealTimerRef.current = null;
+    }
+    try {
+      setBusy(true);
+      await resetBaccaratRound();
+      const s = await fetchBaccaratState();
+      setBalance(s.balance);
+    } finally {
+      setBusy(false);
     }
     setRound(null);
     setIsDealing(false);
     setDealOrder([]);
     setRevealStep(0);
     setShowResults(false);
-    setBalance(INITIAL_BALANCE);
     setBet(BET_AMOUNTS[0]);
     setBetType("PLAYER");
     setError(null);
