@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CardComp from "../components/Card";
 import Header from "../components/Header";
 import {
@@ -32,13 +32,41 @@ export default function BaccaratPage() {
   const [bet, setBet] = useState(BET_AMOUNTS[0]);
   const [betType, setBetType] = useState<BaccaratBetOption>("PLAYER");
   const [round, setRound] = useState<BaccaratBetResult | null>(null);
+  const [isDealing, setIsDealing] = useState(false);
+  const [dealOrder, setDealOrder] = useState<("PLAYER" | "BANKER")[]>([]);
+  const [revealStep, setRevealStep] = useState(0);
+  const dealTimerRef = useRef<number | null>(null);
+  const [showResults, setShowResults] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const playerHand = round?.playerHand ?? [];
   const bankerHand = round?.bankerHand ?? [];
-  const playerValue = round ? round.playerValue : "-";
-  const bankerValue = round ? round.bankerValue : "-";
+  const totalCardsToReveal = dealOrder.length;
+  const revealedCounts = useMemo(() => {
+    if (!totalCardsToReveal) return { player: playerHand.length, banker: bankerHand.length };
+    const upto = Math.min(revealStep, totalCardsToReveal);
+    let player = 0;
+    let banker = 0;
+    for (let i = 0; i < upto; i++) {
+      if (dealOrder[i] === "PLAYER") player++;
+      else banker++;
+    }
+    return {
+      player: Math.min(player, playerHand.length),
+      banker: Math.min(banker, bankerHand.length),
+    };
+  }, [revealStep, totalCardsToReveal, dealOrder, playerHand.length, bankerHand.length]);
+  function computeValue(cards: { pointValue: number }[]): number {
+    const sum = cards.reduce((acc, c) => acc + c.pointValue, 0);
+    return sum % 10;
+  }
+  const playerValue = round
+    ? computeValue(playerHand.slice(0, (showResults ? playerHand.length : revealedCounts.player)))
+    : "-";
+  const bankerValue = round
+    ? computeValue(bankerHand.slice(0, (showResults ? bankerHand.length : revealedCounts.banker)))
+    : "-";
 
   const outcome = round
     ? round.pushed
@@ -79,20 +107,68 @@ export default function BaccaratPage() {
     setBusy(true);
     try {
       const result = playBaccaratRound(bet, betType);
+      // Establish the reveal order:
+      const order: ("PLAYER" | "BANKER")[] = ["PLAYER", "BANKER", "PLAYER", "BANKER"];
+      if (result.playerHand.length === 3) order.push("PLAYER"); // Player draws first if any
+      if (result.bankerHand.length === 3) order.push("BANKER"); // Then banker draws if any
+
       setRound(result);
-      setBalance((prev) => Number((prev + result.netProfit).toFixed(2)));
+      setDealOrder(order);
+      setRevealStep(0);
+      setIsDealing(true);
+      setShowResults(false);
+
+      // Start timed reveal
+      if (dealTimerRef.current) {
+        window.clearInterval(dealTimerRef.current);
+        dealTimerRef.current = null;
+      }
+      dealTimerRef.current = window.setInterval(() => {
+        setRevealStep((prev) => {
+          const next = prev + 1;
+          if (next >= order.length) {
+            // Stop when all cards revealed
+            if (dealTimerRef.current) {
+              window.clearInterval(dealTimerRef.current);
+              dealTimerRef.current = null;
+            }
+            setIsDealing(false);
+            setShowResults(true);
+            // Apply balance once results are revealed
+            setBalance((prev) => Number((prev + result.netProfit).toFixed(2)));
+          }
+          return next;
+        });
+      }, 500);
     } finally {
       setBusy(false);
     }
   }
 
   function resetTable() {
+    if (dealTimerRef.current) {
+      window.clearInterval(dealTimerRef.current);
+      dealTimerRef.current = null;
+    }
     setRound(null);
+    setIsDealing(false);
+    setDealOrder([]);
+    setRevealStep(0);
+    setShowResults(false);
     setBalance(INITIAL_BALANCE);
     setBet(BET_AMOUNTS[0]);
     setBetType("PLAYER");
     setError(null);
   }
+
+  useEffect(() => {
+    return () => {
+      if (dealTimerRef.current) {
+        window.clearInterval(dealTimerRef.current);
+        dealTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
@@ -163,10 +239,10 @@ export default function BaccaratPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleDeal}
-                  disabled={busy || insufficientFunds || invalidBet}
+                  disabled={busy || isDealing || insufficientFunds || invalidBet}
                   className="px-6 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-lg disabled:bg-gray-600 disabled:cursor-not-allowed"
                 >
-                  Place Bet & Deal
+                  {isDealing ? "Dealing..." : "Place Bet & Deal"}
                 </button>
 
                 {round && (
@@ -189,14 +265,14 @@ export default function BaccaratPage() {
                 <h2 className="text-xl font-semibold">Banker&apos;s Hand</h2>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-green-400">{bankerValue}</div>
-                  {round && round.winner === "BANKER" && (
+                  {round && showResults && round.winner === "BANKER" && (
                     <div className="text-yellow-400 text-sm font-semibold">Banker wins</div>
                   )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 justify-center min-h-[140px] items-center">
                 {bankerHand.length > 0 ? (
-                  bankerHand.map((card, idx) => (
+                  bankerHand.slice(0, revealedCounts.banker).map((card, idx) => (
                     <div key={`${card.id}-${idx}`} className="transform hover:scale-105 transition-transform">
                       <CardComp suit={card.suit} value={card.value} width={90} height={126} />
                     </div>
@@ -209,7 +285,7 @@ export default function BaccaratPage() {
           </div>
 
           <div className="flex flex-col items-center gap-3 my-2">
-            {round && (
+            {round && showResults && (
               <div className={`text-xl font-bold px-6 py-3 rounded-lg ${resultClass}`}>
                 <p>{renderOutcome(round)}</p>
                 <p className="text-sm mt-1">
@@ -226,14 +302,14 @@ export default function BaccaratPage() {
                 <h2 className="text-xl font-semibold">Player&apos;s Hand</h2>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-green-400">{playerValue}</div>
-                  {round && round.winner === "PLAYER" && (
+                  {round && showResults && round.winner === "PLAYER" && (
                     <div className="text-yellow-400 text-sm font-semibold">Player wins</div>
                   )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 justify-center min-h-[140px] items-center">
                 {playerHand.length > 0 ? (
-                  playerHand.map((card, idx) => (
+                  playerHand.slice(0, revealedCounts.player).map((card, idx) => (
                     <div key={`${card.id}-${idx}`} className="transform hover:scale-105 transition-transform">
                       <CardComp suit={card.suit} value={card.value} width={90} height={126} />
                     </div>
