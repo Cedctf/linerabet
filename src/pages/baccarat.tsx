@@ -142,7 +142,6 @@ export default function BaccaratPage() {
               </label>
 
               <div className="flex flex-col flex-1 gap-1">
-                <p className="text-sm text-green-200">Bet On</p>
                 <div className="flex flex-wrap gap-2">
                   {BET_TARGETS.map((option) => (
                     <button
