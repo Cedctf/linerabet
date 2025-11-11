@@ -1,11 +1,11 @@
 // Copyright (c) Zefchain Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration testing for the smartcontract application.
+//! Integration testing for the baccarat application.
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use smartcontract::Operation;
+use baccarat::Operation;
 use linera_sdk::test::{QueryOutcome, TestValidator};
 
 /// Tests setting and incrementing a counter
@@ -15,7 +15,7 @@ use linera_sdk::test::{QueryOutcome, TestValidator};
 #[tokio::test(flavor = "multi_thread")]
 async fn single_chain_test() {
     let (validator, module_id) =
-        TestValidator::with_current_module::<smartcontract::SmartcontractAbi, (), u64>().await;
+        TestValidator::with_current_module::<baccarat::BaccaratAbi, (), u64>().await;
     let mut chain = validator.new_chain().await;
 
     let initial_state = 10u64;
