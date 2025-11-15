@@ -15,9 +15,9 @@ function resolveServiceUrl(): string {
         undefined
       : undefined;
 
-  // 3) Hardcoded default
+  // 3) Hardcoded default (TESTNET)
   const fallback =
-    "http://127.0.0.1:8080/chains/35b61dea8829e27eb61a5e17e54fb88d68379e75077c4f33f4416142fdcd680a/applications/e9d202b3c26be41c6baa1b8658abf44fed19732228ce0b7922e0a413ba8b37ad";
+    "http://127.0.0.1:8080/chains/35b61dea8829e27eb61a5e17e54fb88d68379e75077c4f33f4416142fdcd680a/applications/5c6883bded962a6c83a98a9497fc0d5b173a5c23e4c3f73cbb4b310db00c9f58";
 
   return fromBuild || fromMeta || fallback;
 }
@@ -46,12 +46,21 @@ export async function gql<T = any>(body: GqlPayload): Promise<T> {
 // NOTE: Your service returns CamelCase enums.
 // If your page types still use UPPER_SNAKE_CASE, update them there.
 
+export type GameRecord = {
+  playerHand: { suit: string; value: string; id: string }[];
+  dealerHand: { suit: string; value: string; id: string }[];
+  bet: number;
+  result: "PlayerBlackjack" | "PlayerWin" | "DealerWin" | "PlayerBust" | "DealerBust" | "Push";
+  payout: number;
+  timestamp: number;
+};
+
 export async function fetchState() {
   return gql<{
     balance: number;
     currentBet: number;
     allowedBets: number[];
-    phase: "WaitingForBet" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
+    phase: "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
     lastResult:
       | null
       | "PlayerBlackjack"
@@ -62,6 +71,8 @@ export async function fetchState() {
       | "Push";
     playerHand: { suit: string; value: string; id: string }[];
     dealerHand: { suit: string; value: string; id: string }[];
+    roundStartTime: number;
+    gameHistory: GameRecord[];
   }>({
     query: `query {
       balance
@@ -71,14 +82,26 @@ export async function fetchState() {
       lastResult
       playerHand { id suit value }
       dealerHand { id suit value }
+      roundStartTime
+      gameHistory {
+        playerHand { id suit value }
+        dealerHand { id suit value }
+        bet
+        result
+        payout
+        timestamp
+      }
     }`,
   });
 }
 
-// Some GraphQL servers expose u64 as UnsignedLong/ULong/Long.
-// To avoid scalar name mismatches, inline the literal:
-export function startRound(bet: number) {
-  return gql({ query: `mutation { startRound(bet: ${bet}) }` });
+// Betting and game operations
+export function enterBettingPhase() {
+  return gql({ query: `mutation { enterBettingPhase }` });
+}
+
+export function startGame(bet: number) {
+  return gql({ query: `mutation { startGame(bet: ${bet}) }` });
 }
 
 export function hit() {
@@ -86,7 +109,4 @@ export function hit() {
 }
 export function stand() {
   return gql({ query: `mutation { stand }` });
-}
-export function resetRound() {
-  return gql({ query: `mutation { resetRound }` });
 }
