@@ -12,7 +12,7 @@ use linera_sdk::{
 
 use contracts::Operation;
 
-use self::state::{Card, ContractsState, GamePhase, GameResult, ALLOWED_BETS};
+use self::state::{Card, ContractsState, GamePhase, GameRecord, GameResult, ALLOWED_BETS};
 
 pub struct ContractsService {
     state: ContractsState,
@@ -40,6 +40,13 @@ impl Service for ContractsService {
 
     async fn handle_query(&self, query: Self::Query) -> Self::QueryResponse {
         // snapshot values for the query root
+        let mut history: Vec<GameRecord> = Vec::new();
+        let count = self.state.game_history.count();
+        for i in 0..count {
+            if let Some(record) = self.state.game_history.get(i).await.ok().flatten() {
+                history.push(record);
+            }
+        }
         let data = QueryData {
             player_balance: *self.state.player_balance.get(),
             current_bet: *self.state.current_bet.get(),
@@ -49,6 +56,8 @@ impl Service for ContractsService {
             dealer_hand: self.state.dealer_hand.get().clone(),
             allowed_bets: ALLOWED_BETS.to_vec(),
             default_buy_in: *self.state.default_buy_in.get(),
+            round_start_time: *self.state.round_start_time.get(),
+            game_history: history,
         };
 
         Schema::build(
@@ -72,6 +81,8 @@ struct QueryData {
     dealer_hand: Vec<Card>,
     allowed_bets: Vec<u64>,
     default_buy_in: u64,
+    round_start_time: u64,
+    game_history: Vec<GameRecord>,
 }
 
 struct QueryRoot {
@@ -115,9 +126,19 @@ impl QueryRoot {
         self.data.player_hand.clone()
     }
 
-    /// Dealer hand (array of cards)
+    /// Dealer hand (array of cards) - hole card hidden during player turn
     async fn dealerHand(&self) -> Vec<Card> {
         self.data.dealer_hand.clone()
+    }
+
+    /// Round start time in microseconds (0 if no active round)
+    async fn roundStartTime(&self) -> u64 {
+        self.data.round_start_time
+    }
+
+    /// Game history (all completed games)
+    async fn gameHistory(&self) -> Vec<GameRecord> {
+        self.data.game_history.clone()
     }
 }
 

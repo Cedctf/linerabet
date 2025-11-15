@@ -27,12 +27,12 @@ pub struct BlackjackInit {
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    /// Begin a new round by selecting a bet and dealing cards.
-    StartRound { bet: u64 },
-    /// Request one additional card for the player.
+    /// Enter betting phase.
+    EnterBettingPhase,
+    /// Lock in the bet and start the game (deal cards). Starts a 20-second player turn timer.
+    StartGame { bet: u64 },
+    /// Request one additional card for the player. Resets the 20-second timer. Auto-stands if timer expires.
     Hit,
     /// Stop drawing player cards and let the dealer resolve the round.
     Stand,
-    /// Clear the table once the round is over.
-    ResetRound,
 }

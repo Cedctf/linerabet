@@ -1,8 +1,9 @@
 use async_graphql::{Enum, SimpleObject};
-use linera_sdk::views::{linera_views, RegisterView, RootView, ViewStorageContext};
+use linera_sdk::views::{linera_views, LogView, RegisterView, RootView, ViewStorageContext};
 use serde::{Deserialize, Serialize};
 
 pub const ALLOWED_BETS: [u64; 5] = [1, 2, 3, 4, 5];
+pub const PLAYER_TURN_TIMER_SECONDS: u64 = 20;
 
 #[derive(RootView)]
 #[view(context = ViewStorageContext)]
@@ -10,12 +11,15 @@ pub struct ContractsState {
     pub deck: RegisterView<Vec<Card>>,
     pub player_hand: RegisterView<Vec<Card>>,
     pub dealer_hand: RegisterView<Vec<Card>>,
+    pub dealer_hole_card: RegisterView<Option<Card>>,
     pub player_balance: RegisterView<u64>,
     pub current_bet: RegisterView<u64>,
     pub phase: RegisterView<GamePhase>,
     pub last_result: RegisterView<Option<GameResult>>,
     pub default_buy_in: RegisterView<u64>,
     pub random_seed: RegisterView<u64>,
+    pub round_start_time: RegisterView<u64>,
+    pub game_history: LogView<GameRecord>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, SimpleObject)]
@@ -40,6 +44,7 @@ impl Card {
 pub enum GamePhase {
     #[default]
     WaitingForBet,
+    BettingPhase,
     PlayerTurn,
     DealerTurn,
     RoundComplete,
@@ -53,4 +58,14 @@ pub enum GameResult {
     PlayerBust,
     DealerBust,
     Push,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, SimpleObject)]
+pub struct GameRecord {
+    pub player_hand: Vec<Card>,
+    pub dealer_hand: Vec<Card>,
+    pub bet: u64,
+    pub result: GameResult,
+    pub payout: u64,
+    pub timestamp: u64,
 }
