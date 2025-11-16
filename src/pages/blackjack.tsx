@@ -67,6 +67,7 @@ export default function Blackjack() {
   const [lastResult, setLastResult] = useState<Result>(null);
 
   const [playerHand, setPlayerHand] = useState<BlackjackCard[]>([]);
+  const [splitHand, setSplitHand] = useState<BlackjackCard[]>([]);
   const [dealerHand, setDealerHand] = useState<BlackjackCard[]>([]);
   const [roundStartTime, setRoundStartTime] = useState<number>(0);
   const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);

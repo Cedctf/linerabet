@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+target
 dist
 dist-ssr
 *.local
@@ -24,3 +25,4 @@ dist-ssr
 *.sln
 *.sw?
 package-lock.json
+Cargo.lock
