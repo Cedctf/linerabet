@@ -124,7 +124,7 @@ export default function Roulette() {
     // Calculate winnings
     let totalWinnings = 0;
     Object.values(bets).forEach(bet => {
-      if (checkWin(bet, result)) {
+      if (result !== null && checkWin(bet, result)) {
         const payout = bet.amount * getPayoutMultiplier(bet.numbers.length);
         totalWinnings += bet.amount + payout; // Original bet + winnings
       }
