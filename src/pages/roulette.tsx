@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { RouletteWheel } from 'react-casino-roulette';
 import 'react-casino-roulette/dist/index.css';
+import Header from '../components/Header';
 
 // Roulette wheel numbers in order (American roulette with 00)
 const WHEEL_ORDER = [
@@ -159,8 +160,22 @@ export default function Roulette() {
   }
 
   return (
-    <div className="min-h-screen overflow-auto bg-gradient-to-br from-green-800 to-green-950 font-sans">
-      <main className="flex flex-col items-center justify-start gap-4 py-8 px-4">
+    <div className="min-h-screen bg-black text-white overflow-hidden relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-900 to-green-950 opacity-90" />
+      <div
+        className="absolute inset-0 opacity-10"
+        style={{
+          backgroundImage:
+            "linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)",
+          backgroundSize: "50px 50px",
+        }}
+      />
+      <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
+      <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
+
+      <div className="relative z-10">
+        <Header />
+        <main className="flex flex-col items-center justify-start gap-4 py-8 px-4 overflow-auto">
         {/* Title */}
         <div className="text-center">
           <h1 className="text-4xl font-bold text-white mb-2">Roulette</h1>
@@ -466,7 +481,8 @@ export default function Roulette() {
             </div>
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
