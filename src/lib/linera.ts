@@ -17,7 +17,7 @@ function resolveServiceUrl(): string {
 
   // 3) Hardcoded default (TESTNET)
   const fallback =
-    "http://127.0.0.1:8080/chains/35b61dea8829e27eb61a5e17e54fb88d68379e75077c4f33f4416142fdcd680a/applications/5c6883bded962a6c83a98a9497fc0d5b173a5c23e4c3f73cbb4b310db00c9f58";
+    "http://localhost:8080/chains/503a882ee3d12921f772699e47db7c7035381a1f54a68322ed8df8aa80ccf846/applications/174ec6ae725f72fbff6285c5352c1262743362afbca3c7c952024af4db309115";
 
   return fromBuild || fromMeta || fallback;
 }
