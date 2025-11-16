@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { RouletteWheel } from 'react-casino-roulette';
 import 'react-casino-roulette/dist/index.css';
 import Header from '../components/Header';
+import {
+  fetchRouletteState,
+  placeBetsAndSpin,
+  resetRouletteRound,
+  type Bet,
+  type BetType,
+  type SpinResult,
+} from '../lib/roulette-chain';
 
 // Roulette wheel numbers in order (American roulette with 00)
 const WHEEL_ORDER = [
@@ -31,133 +39,140 @@ const getNumberColor = (num: number | string) => {
   return RED_NUMBERS.includes(Number(num)) ? 'red' : 'black';
 };
 
-// Check if bet wins
-const checkWin = (bet: any, result: number | string) => {
-  return bet.numbers.includes(result);
-};
-
-// Calculate payout multiplier based on how many numbers are covered
-const getPayoutMultiplier = (numbersCount: number) => {
-  if (numbersCount === 1) return 35; // Straight up
-  if (numbersCount === 2) return 17; // Split
-  if (numbersCount === 3) return 11; // Street
-  if (numbersCount === 4) return 8; // Corner
-  if (numbersCount === 6) return 5; // Line
-  if (numbersCount === 12) return 2; // Dozen/Column
-  if (numbersCount === 18) return 1; // Red/Black, Odd/Even, High/Low
-  return 0;
-};
-
 export default function Roulette() {
   const [balance, setBalance] = useState(1000);
   const [selectedChip, setSelectedChip] = useState(5);
-  const [bets, setBets] = useState<Record<string, any>>({});
+  const [bets, setBets] = useState<Bet[]>([]);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [result, setResult] = useState<number | string | null>(null);
-  const [history, setHistory] = useState<(number | string)[]>([]);
+  const [result, setResult] = useState<SpinResult | null>(null);
+  const [history, setHistory] = useState<number[]>([]);
   const [showResult, setShowResult] = useState(false);
   const [startWheel, setStartWheel] = useState(false);
   const [winningBet, setWinningBet] = useState('0');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const placeBet = (betKey: string, numbers: (number | string)[], label: string) => {
+  // Sync initial on-chain state on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await fetchRouletteState();
+        setBalance(s.playerBalance);
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load on-chain state");
+      }
+    })();
+  }, []);
+
+  const placeBet = (betType: BetType, selection: number) => {
     if (balance < selectedChip) {
-      alert('Insufficient balance!');
+      setError('Insufficient balance!');
       return;
     }
 
-    setBets(prevBets => {
-      const newBets = { ...prevBets };
-      if (newBets[betKey]) {
-        newBets[betKey] = {
-          ...newBets[betKey],
-          amount: newBets[betKey].amount + selectedChip
-        };
-      } else {
-        newBets[betKey] = {
-          amount: selectedChip,
-          numbers: numbers,
-          label: label
-        };
-      }
-      return newBets;
-    });
-    
+    const newBet: Bet = {
+      betType,
+      amount: selectedChip,
+      selection,
+    };
+
+    setBets(prevBets => [...prevBets, newBet]);
     setBalance(balance - selectedChip);
   };
 
   const clearBets = () => {
-    const totalBetAmount = Object.values(bets).reduce((sum, bet) => sum + bet.amount, 0);
+    const totalBetAmount = bets.reduce((sum, bet) => sum + bet.amount, 0);
     setBalance(balance + totalBetAmount);
-    setBets({});
+    setBets([]);
   };
 
-  const spin = () => {
-    if (Object.keys(bets).length === 0) {
-      alert('Please place at least one bet!');
+  const spin = async () => {
+    if (bets.length === 0) {
+      setError('Please place at least one bet!');
       return;
     }
 
+    setError(null);
+    setBusy(true);
     setIsSpinning(true);
     setShowResult(false);
     setResult(null);
     setStartWheel(false);
 
-    // Small delay to reset wheel, then start spinning
-    setTimeout(() => {
-      // Determine winning number
-      const spinResult = WHEEL_ORDER[Math.floor(Math.random() * WHEEL_ORDER.length)];
+    try {
+      // Call chain mutation
+      await placeBetsAndSpin(bets);
+      // Fetch new state
+      const state = await fetchRouletteState();
+      setBalance(state.playerBalance);
       
-      // Set the winning bet for the RouletteWheel component
-      setWinningBet(spinResult.toString());
-      setResult(spinResult);
-      
-      // Start the wheel spinning
-      setStartWheel(true);
-    }, 100);
+      if (state.lastResult) {
+        const spinResult = state.lastResult;
+        setResult(spinResult);
+        
+        // Convert winning number for wheel display
+        const winningNumber = spinResult.winningNumber === 37 ? '00' : spinResult.winningNumber.toString();
+        setWinningBet(winningNumber);
+        
+        // Add to history
+        setHistory(prev => [spinResult.winningNumber, ...prev.slice(0, 9)]);
+        
+        // Start the wheel spinning
+        setStartWheel(true);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Spin failed');
+      setIsSpinning(false);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleSpinningEnd = () => {
     setIsSpinning(false);
     setShowResult(true);
-    setHistory([result!, ...history.slice(0, 9)]); // Keep last 10 results
-
-    // Calculate winnings
-    let totalWinnings = 0;
-    Object.values(bets).forEach(bet => {
-      if (result !== null && checkWin(bet, result)) {
-        const payout = bet.amount * getPayoutMultiplier(bet.numbers.length);
-        totalWinnings += bet.amount + payout; // Original bet + winnings
-      }
-    });
-
-    if (totalWinnings > 0) {
-      setBalance(balance => balance + totalWinnings);
-    }
 
     // Clear bets after spin
     setTimeout(() => {
-      setBets({});
+      setBets([]);
       setStartWheel(false);
     }, 2000);
   };
 
-  const totalBetAmount = Object.values(bets).reduce((sum, bet) => sum + bet.amount, 0);
+  async function resetTable() {
+    try {
+      setBusy(true);
+      await resetRouletteRound();
+      const s = await fetchRouletteState();
+      setBalance(s.playerBalance);
+    } finally {
+      setBusy(false);
+    }
+    setBets([]);
+    setResult(null);
+    setIsSpinning(false);
+    setShowResult(false);
+    setStartWheel(false);
+    setError(null);
+  }
+
+  const totalBetAmount = bets.reduce((sum, bet) => sum + bet.amount, 0);
 
   // Check if a number is included in any active bet
   const isNumberBetOn = (num: number | string) => {
-    return Object.values(bets).some(bet => bet.numbers.includes(num));
+    const numValue = num === '00' ? 37 : Number(num);
+    return bets.some(bet => 
+      (bet.betType === 'StraightUp' && bet.selection === numValue)
+    );
   };
 
-  // Generate number grid (3 rows x 12 columns) - matching real roulette layout
-  const numberGrid = [];
-  for (let row = 0; row < 3; row++) {
-    const rowNumbers = [];
-    for (let col = 0; col < 12; col++) {
-      const num = (2 - row) + (col * 3) + 1; // Top row: 3,6,9... Middle: 2,5,8... Bottom: 1,4,7...
-      rowNumbers.push(num);
-    }
-    numberGrid.push(rowNumbers);
-  }
+  const getBetAmount = (num: number | string) => {
+    const numValue = num === '00' ? 37 : Number(num);
+    const bet = bets.find(bet => 
+      bet.betType === 'StraightUp' && bet.selection === numValue
+    );
+    return bet ? bet.amount : 0;
+  };
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
@@ -178,7 +193,7 @@ export default function Roulette() {
         <main className="flex flex-col items-center justify-start gap-4 py-8 px-4 overflow-auto">
         {/* Title */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-2">Roulette</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">Roulette (On-Chain)</h1>
           <p className="text-green-200 text-sm">Select chips and place your bets on the table!</p>
         </div>
 
@@ -196,6 +211,7 @@ export default function Roulette() {
               </div>
             )}
           </div>
+          {error && <p className="text-red-300 text-sm mt-2">{error}</p>}
         </div>
 
         {/* Wheel and Table Side by Side */}
@@ -218,18 +234,18 @@ export default function Roulette() {
                     <div className="bg-black/90 backdrop-blur-sm rounded-2xl px-8 py-6 border-4 border-yellow-500 shadow-2xl">
                       <div className="flex flex-col items-center">
                         <div className={`text-6xl font-bold mb-2 ${
-                          getNumberColor(result) === 'red' ? 'text-red-500' :
-                          getNumberColor(result) === 'black' ? 'text-white' :
+                          getNumberColor(result.winningNumber) === 'red' ? 'text-red-500' :
+                          getNumberColor(result.winningNumber) === 'black' ? 'text-white' :
                           'text-green-400'
                         }`}>
-                          {result}
+                          {result.winningNumber === 37 ? '00' : result.winningNumber}
                         </div>
                         <div className={`text-lg font-semibold ${
-                          getNumberColor(result) === 'red' ? 'text-red-300' :
-                          getNumberColor(result) === 'black' ? 'text-gray-300' :
+                          getNumberColor(result.winningNumber) === 'red' ? 'text-red-300' :
+                          getNumberColor(result.winningNumber) === 'black' ? 'text-gray-300' :
                           'text-green-300'
                         }`}>
-                          {getNumberColor(result).toUpperCase()}
+                          {getNumberColor(result.winningNumber).toUpperCase()}
                         </div>
                       </div>
                     </div>
@@ -238,11 +254,12 @@ export default function Roulette() {
               </div>
 
               {/* Result Message */}
-              {showResult && result !== null && (
+              {showResult && result && (
                 <div className="text-center">
-                  {Object.values(bets).some(bet => checkWin(bet, result)) ? (
+                  {result.totalPayout > 0 ? (
                     <div className="text-xl font-bold text-green-400 animate-pulse">
                       🎉 YOU WIN! 🎉
+                      <div className="text-sm mt-1">Payout: ${result.totalPayout}</div>
                     </div>
                   ) : (
                     <div className="text-lg font-bold text-red-400">
@@ -266,7 +283,7 @@ export default function Roulette() {
                           'bg-green-600 border-green-400'
                         }`}
                       >
-                        {num}
+                        {num === 37 ? '00' : num}
                       </div>
                     ))}
                   </div>
@@ -307,11 +324,12 @@ export default function Roulette() {
                 {Array.from({ length: 36 }, (_, i) => i + 1).map(num => {
                   const isRed = RED_NUMBERS.includes(num);
                   const isBetOn = isNumberBetOn(num);
+                  const betAmount = getBetAmount(num);
                   return (
                     <button
                       key={num}
-                      onClick={() => placeBet(`num-${num}`, [num], num.toString())}
-                      disabled={isSpinning}
+                      onClick={() => placeBet('StraightUp', num)}
+                      disabled={isSpinning || busy}
                       className={`relative w-12 h-12 font-bold text-white text-base border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                         isRed 
                           ? 'bg-red-600 hover:bg-red-500' 
@@ -323,9 +341,9 @@ export default function Roulette() {
                       }`}
                     >
                       {num}
-                      {bets[`num-${num}`] && (
-                        <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets[`num-${num}`].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                          ${bets[`num-${num}`].amount}
+                      {betAmount > 0 && (
+                        <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= betAmount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
+                          ${betAmount}
                         </div>
                       )}
                     </button>
@@ -336,30 +354,30 @@ export default function Roulette() {
               {/* Zero and Double Zero */}
               <div className="flex gap-1 mb-4 justify-center">
                 <button
-                  onClick={() => placeBet('num-0', [0], '0')}
-                  disabled={isSpinning}
+                  onClick={() => placeBet('StraightUp', 0)}
+                  disabled={isSpinning || busy}
                   className={`relative w-12 h-12 bg-green-600 hover:bg-green-500 text-white font-bold text-xl border-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     isNumberBetOn(0) ? 'border-yellow-400 ring-2 ring-yellow-400 shadow-lg shadow-yellow-400/50' : 'border-white'
                   }`}
                 >
                   0
-                  {bets['num-0'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['num-0'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['num-0'].amount}
+                  {getBetAmount(0) > 0 && (
+                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= getBetAmount(0))?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
+                      ${getBetAmount(0)}
                     </div>
                   )}
                 </button>
                 <button
-                  onClick={() => placeBet('num-00', ['00'], '00')}
-                  disabled={isSpinning}
+                  onClick={() => placeBet('StraightUp', 37)}
+                  disabled={isSpinning || busy}
                   className={`relative w-12 h-12 bg-green-600 hover:bg-green-500 text-white font-bold text-xl border-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     isNumberBetOn('00') ? 'border-yellow-400 ring-2 ring-yellow-400 shadow-lg shadow-yellow-400/50' : 'border-white'
                   }`}
                 >
                   00
-                  {bets['num-00'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['num-00'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['num-00'].amount}
+                  {getBetAmount('00') > 0 && (
+                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= getBetAmount('00'))?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
+                      ${getBetAmount('00')}
                     </div>
                   )}
                 </button>
@@ -368,96 +386,51 @@ export default function Roulette() {
               {/* Outside bets */}
               <div className="grid grid-cols-6 gap-1">
                 <button
-                  onClick={() => {
-                    const lowNums = Array.from({ length: 18 }, (_, i) => i + 1);
-                    placeBet('low', lowNums, '1-18');
-                  }}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
+                  onClick={() => placeBet('Range', 0)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
                 >
                   1-18
-                  {bets['low'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['low'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['low'].amount}
-                    </div>
-                  )}
                 </button>
                 
                 <button
-                  onClick={() => {
-                    const evenNums = Array.from({ length: 36 }, (_, i) => i + 1).filter(n => n % 2 === 0);
-                    placeBet('even', evenNums, 'Even');
-                  }}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
+                  onClick={() => placeBet('Parity', 0)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
                 >
                   EVEN
-                  {bets['even'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['even'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['even'].amount}
-                    </div>
-                  )}
                 </button>
                 
                 <button
-                  onClick={() => placeBet('red', RED_NUMBERS, 'Red')}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-red-600 hover:bg-red-500 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => placeBet('Color', 0)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-red-600 hover:bg-red-500 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   RED
-                  {bets['red'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['red'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['red'].amount}
-                    </div>
-                  )}
                 </button>
                 
                 <button
-                  onClick={() => {
-                    const blackNums = Array.from({ length: 36 }, (_, i) => i + 1).filter(n => !RED_NUMBERS.includes(n));
-                    placeBet('black', blackNums, 'Black');
-                  }}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-black hover:bg-gray-900 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => placeBet('Color', 1)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-black hover:bg-gray-900 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   BLACK
-                  {bets['black'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['black'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['black'].amount}
-                    </div>
-                  )}
                 </button>
                 
                 <button
-                  onClick={() => {
-                    const oddNums = Array.from({ length: 36 }, (_, i) => i + 1).filter(n => n % 2 === 1);
-                    placeBet('odd', oddNums, 'Odd');
-                  }}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
+                  onClick={() => placeBet('Parity', 1)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
                 >
                   ODD
-                  {bets['odd'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['odd'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['odd'].amount}
-                    </div>
-                  )}
                 </button>
                 
                 <button
-                  onClick={() => {
-                    const highNums = Array.from({ length: 18 }, (_, i) => i + 19);
-                    placeBet('high', highNums, '19-36');
-                  }}
-                  disabled={isSpinning}
-                  className="relative py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
+                  onClick={() => placeBet('Range', 1)}
+                  disabled={isSpinning || busy}
+                  className="py-3 bg-amber-200/40 hover:bg-amber-300/50 text-white font-bold text-sm border-2 border-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
                 >
                   19-36
-                  {bets['high'] && (
-                    <div className={`absolute inset-0 w-8 h-8 m-auto rounded-full ${CHIP_VALUES.find(c => c.value <= bets['high'].amount)?.color || CHIP_VALUES[0].color} border-2 flex items-center justify-center text-[10px] font-bold z-20 shadow-lg`}>
-                      ${bets['high'].amount}
-                    </div>
-                  )}
                 </button>
               </div>
             </div>
@@ -466,18 +439,27 @@ export default function Roulette() {
             <div className="flex gap-4 justify-center">
               <button
                 onClick={spin}
-                disabled={isSpinning || Object.keys(bets).length === 0}
+                disabled={isSpinning || busy || bets.length === 0}
                 className="px-8 py-3 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold text-xl rounded-lg shadow-lg transform hover:scale-105 transition-all"
               >
-                {isSpinning ? 'SPINNING...' : 'SPIN'}
+                {isSpinning ? 'SPINNING...' : busy ? 'PROCESSING...' : 'SPIN'}
               </button>
               <button
                 onClick={clearBets}
-                disabled={isSpinning || Object.keys(bets).length === 0}
+                disabled={isSpinning || busy || bets.length === 0}
                 className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold text-lg rounded-lg shadow-lg transform hover:scale-105 transition-all"
               >
                 Clear Bets
               </button>
+              {result && (
+                <button
+                  onClick={resetTable}
+                  disabled={busy}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg border border-gray-600 disabled:opacity-60"
+                >
+                  Reset Table
+                </button>
+              )}
             </div>
           </div>
         </div>
