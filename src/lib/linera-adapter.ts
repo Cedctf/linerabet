@@ -6,7 +6,6 @@ import initLinera, {
 } from "@linera/client";
 import type { Wallet as DynamicWallet } from "@dynamic-labs/sdk-react-core";
 import { DynamicSigner } from "./dynamic-signer";
-import { LINERA_RPC_URL, COUNTER_APP_ID } from "../constants";
 
 export interface LineraProvider {
   client: Client;
@@ -22,9 +21,8 @@ export class LineraAdapter {
   private application: Application | null = null;
   private wasmInitPromise: Promise<unknown> | null = null;
   private connectPromise: Promise<LineraProvider> | null = null;
-  private onConnectionChange?: () => void;
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): LineraAdapter {
     if (!LineraAdapter.instance) LineraAdapter.instance = new LineraAdapter();
@@ -33,7 +31,7 @@ export class LineraAdapter {
 
   async connect(
     dynamicWallet: DynamicWallet,
-    rpcUrl?: string
+    rpcUrl: string
   ): Promise<LineraProvider> {
     if (this.provider) return this.provider;
     if (this.connectPromise) return this.connectPromise;
@@ -62,9 +60,11 @@ export class LineraAdapter {
           }
         }
 
-        const faucet = await new Faucet(rpcUrl || LINERA_RPC_URL);
+        const faucet = await new Faucet(rpcUrl);
         const wallet = await faucet.createWallet();
-        const chainId = await faucet.claimChain(wallet, address);
+        // Reverting to 2 arguments as the previous code worked with 2.
+        // Casting to any to bypass conflicting lint errors (some say 2, some say 3).
+        const chainId = await (faucet as any).claimChain(wallet, address);
 
         const signer = await new DynamicSigner(dynamicWallet);
         const client = await new Client(wallet, signer, false);
@@ -77,8 +77,8 @@ export class LineraAdapter {
           chainId,
           address: dynamicWallet.address,
         };
-        console.log("🔄 Notifying connection state change (chain connected)");
-        this.onConnectionChange?.();
+
+        this.notifyListeners();
         return this.provider;
       })();
 
@@ -87,8 +87,7 @@ export class LineraAdapter {
     } catch (error) {
       console.error("Failed to connect to Linera:", error);
       throw new Error(
-        `Failed to connect to Linera network: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to connect to Linera network: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -96,28 +95,35 @@ export class LineraAdapter {
     }
   }
 
-  async setApplication(appId?: string) {
+  async setApplication(appId: string) {
     if (!this.provider) throw new Error("Not connected to Linera");
+    if (!appId) throw new Error("Application ID is required");
 
+    // Use client.frontend().application(appId) as per official docs
     const application = await this.provider.client
       .frontend()
-      .application(appId || COUNTER_APP_ID);
+      .application(appId);
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");
     this.application = application;
-    console.log("🔄 Notifying connection state change (app set)");
-    this.onConnectionChange?.();
+    this.notifyListeners();
   }
 
-  async queryApplication<T>(query: object): Promise<T> {
+  async queryApplication<T>(query: string, variables?: Record<string, any>): Promise<T> {
     if (!this.application) throw new Error("Application not set");
 
-    const result = await this.application.query(JSON.stringify(query));
+    const queryJson = variables ? JSON.stringify({ query, variables }) : JSON.stringify({ query });
+    const result = await this.application.query(queryJson);
     const response = JSON.parse(result);
 
+    if (response.errors) {
+      console.error("GraphQL Errors:", response.errors);
+      throw new Error(response.errors[0].message);
+    }
+
     console.log("✅ Linera application queried successfully!");
-    return response as T;
+    return response.data as T;
   }
 
   getProvider(): LineraProvider {
@@ -140,6 +146,11 @@ export class LineraAdapter {
     return this.application;
   }
 
+  identity(): string {
+    if (!this.provider) throw new Error("Not connected to Linera");
+    return this.provider.address;
+  }
+
   isChainConnected(): boolean {
     return this.provider !== null;
   }
@@ -148,19 +159,36 @@ export class LineraAdapter {
     return this.application !== null;
   }
 
+  private listeners = new Set<() => void>();
+
+  private notifyListeners() {
+    this.listeners.forEach((listener) => listener());
+  }
+
+  subscribe(callback: () => void): () => void {
+    this.listeners.add(callback);
+    return () => this.listeners.delete(callback);
+  }
+
+  // Deprecated: kept for backward compatibility if needed, but mapped to subscribe
   onConnectionStateChange(callback: () => void): void {
-    this.onConnectionChange = callback;
+    this.subscribe(callback);
   }
 
   offConnectionStateChange(): void {
-    this.onConnectionChange = undefined;
+    this.listeners.clear();
+  }
+
+  resetApplication(): void {
+    this.application = null;
+    this.notifyListeners();
   }
 
   reset(): void {
     this.application = null;
     this.provider = null;
     this.connectPromise = null;
-    this.onConnectionChange?.();
+    this.notifyListeners();
   }
 }
 

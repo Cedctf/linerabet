@@ -57,7 +57,8 @@ export default function DynamicMethods({ isDarkMode }: DynamicMethodsProps) {
         return;
       }
 
-      const provider = await lineraAdapter.connect(primaryWallet);
+      const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'http://localhost:8079';
+      const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
       providerRef.current = provider;
       setChainConnected(true);
 
@@ -87,11 +88,16 @@ export default function DynamicMethods({ isDarkMode }: DynamicMethodsProps) {
     };
 
     client.onNotification(handler);
-    return () => client.onNotification(() => {});
+    return () => client.onNotification(() => { });
   }, [chainConnected]);
 
   async function handleSetApplication() {
-    await lineraAdapter.setApplication();
+    const appId = import.meta.env.VITE_LINERA_APPLICATION_ID;
+    if (!appId) {
+      setError("Application ID not configured");
+      return;
+    }
+    await lineraAdapter.setApplication(appId);
     await getCount();
     setAppConnected(true);
   }

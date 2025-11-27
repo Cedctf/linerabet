@@ -1,4 +1,4 @@
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
+import ConnectWallet from "./ConnectWallet";
 
 function Header() {
   return (
@@ -8,10 +8,10 @@ function Header() {
           {/* Logo */}
           <div className="flex items-center space-x-2">
             <div className="w-10 h-10 rounded-lg overflow-hidden">
-              <img 
-                src="/LineraBet.png" 
-                alt="LineraBet Logo" 
-                width={40} 
+              <img
+                src="/LineraBet.png"
+                alt="LineraBet Logo"
+                width={40}
                 height={40}
                 className="object-cover"
               />
@@ -28,9 +28,9 @@ function Header() {
             <a href="#" className="hover:text-green-400 transition-colors">Rewards</a>
           </nav>
 
-          {/* Connect Wallet Button with DynamicWidget */}
+          {/* Connect Wallet Button */}
           <div className="dynamic-widget-wrapper flex justify-end">
-            <DynamicWidget />
+            <ConnectWallet />
           </div>
         </div>
       </div>
