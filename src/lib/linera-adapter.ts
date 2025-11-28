@@ -60,14 +60,15 @@ export class LineraAdapter {
           }
         }
 
+        console.log("🔗 Connecting to Linera Faucet:", rpcUrl);
         const faucet = await new Faucet(rpcUrl);
         const wallet = await faucet.createWallet();
         // Reverting to 2 arguments as the previous code worked with 2.
         // Casting to any to bypass conflicting lint errors (some say 2, some say 3).
-        const chainId = await (faucet as any).claimChain(wallet, address);
+        const chainId = await faucet.claimChain(wallet, address);
 
         const signer = await new DynamicSigner(dynamicWallet);
-        const client = await new Client(wallet, signer, false);
+        const client = await new Client(wallet, signer);
         console.log("✅ Linera wallet created successfully!");
 
         this.provider = {

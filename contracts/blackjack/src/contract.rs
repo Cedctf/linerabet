@@ -77,8 +77,8 @@ impl Contract for ContractsContract {
         }
 
         match operation {
-            Operation::EnterBettingPhase => {
-                if let Err(e) = Self::enter_betting_phase(player) {
+            Operation::Reset => {
+                if let Err(e) = Self::reset(player) {
                     panic!("{}", e);
                 }
             }
@@ -97,7 +97,17 @@ impl Contract for ContractsContract {
                     panic!("{}", e);
                 }
             }
+            Operation::RequestChips => {
+                let mut player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
+                // Reset balance to default buy-in (100)
+                player.player_balance.set(100); 
+                // Also ensure phase is reset if they were stuck
+                if *player.player_balance.get() > 0 && *player.phase.get() == GamePhase::RoundComplete {
+                     player.phase.set(GamePhase::WaitingForBet);
+                }
+            }
         }
+        Self::Response::default()
     }
     
 
@@ -109,15 +119,15 @@ impl Contract for ContractsContract {
 }
 
 impl ContractsContract {
-    // Enter betting phase
-    fn enter_betting_phase(player: &mut PlayerStateView) -> Result<(), String> {
+    // Reset game to WaitingForBet
+    fn reset(player: &mut PlayerStateView) -> Result<(), String> {
         let phase = *player.phase.get();
         ensure!(
             matches!(phase, GamePhase::WaitingForBet | GamePhase::RoundComplete),
-            "Cannot enter betting phase during active game"
+            "Cannot reset during active game"
         );
 
-        player.phase.set(GamePhase::BettingPhase);
+        player.phase.set(GamePhase::WaitingForBet);
 
         // Clear previous round data
         player.deck.set(Vec::new());

@@ -12,7 +12,7 @@
   "dependencies": {
     "@dynamic-labs/ethereum": "^4",
     "@dynamic-labs/sdk-react-core": "^4",
-    "@linera/client": "^0.15.6",
+    "@linera/client": "^0.15.4",
     "@metamask/providers": "^17.0.0",
     "ethers": "^6.14.3",
     "gsap": "^3.13.0",

@@ -8,7 +8,7 @@ import {
 import { lineraAdapter } from "@/lib/linera-adapter";
 
 // New Multi-User Blackjack Application ID
-const BLACKJACK_APP_ID = "22faafacfad292ac52489efdbf44809a77174b5841a093275f5ecac5f9fb2aa6";
+const BLACKJACK_APP_ID = "56877dab466ae86fe6707da275dbaf8d4bb51a1a05fdad8304d55535f9e0018b";
 
 // GraphQL returns UPPER_SNAKE_CASE enums on your network.
 type Phase = "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
@@ -78,6 +78,18 @@ function normalizeResult(result: string | null): string | null {
   return map[result] || result;
 }
 
+/** Convert chain phase (UPPER_SNAKE_CASE) to frontend Phase (PascalCase) */
+function normalizePhase(phase: string): Phase {
+  const map: Record<string, Phase> = {
+    WAITING_FOR_BET: "WaitingForBet",
+    BETTING_PHASE: "BettingPhase",
+    PLAYER_TURN: "PlayerTurn",
+    DEALER_TURN: "DealerTurn",
+    ROUND_COMPLETE: "RoundComplete",
+  };
+  return map[phase] || (phase as Phase);
+}
+
 export default function Blackjack() {
   // On-chain mirrors
   const [balance, setBalance] = useState<number>(0);
@@ -127,7 +139,7 @@ export default function Blackjack() {
 
       const owner = lineraAdapter.identity();
       const query = `
-        query GetPlayerState($owner: Owner!) {
+        query GetPlayerState($owner: AccountOwner!) {
           player(owner: $owner) {
             playerBalance
             currentBet
@@ -159,20 +171,26 @@ export default function Blackjack() {
       `;
 
       const data = await lineraAdapter.queryApplication<QueryResponse>(query, { owner });
+      console.log("State refreshed:", data);
 
       if (data.player) {
-        setBalance(data.player.playerBalance);
+        // Check for "new player" state: 0 balance and no history.
+        // The contract initializes balance on the first transaction, so we show defaultBuyIn.
+        const isNewPlayer = data.player.playerBalance === 0 && data.player.gameHistory.length === 0;
+        const effectiveBalance = isNewPlayer ? data.defaultBuyIn : data.player.playerBalance;
+
+        setBalance(effectiveBalance);
         setCurrentBet(data.player.currentBet);
         setAllowedBets(data.player.allowedBets);
         if (!data.player.allowedBets.includes(bet)) setBet(data.player.allowedBets[0] ?? 1);
-        setPhase(data.player.phase);
+        setPhase(normalizePhase(data.player.phase));
         setLastResult(data.player.lastResult);
         setPlayerHand(normalizeCards(data.player.playerHand));
         setDealerHand(normalizeCards(data.player.dealerHand));
         setRoundStartTime(data.player.roundStartTime);
         setGameHistory(data.player.gameHistory);
       } else {
-        // New player defaults
+        // Fallback if player is null (though likely covered by above due to default view)
         setBalance(data.defaultBuyIn);
         setPhase("WaitingForBet");
         setAllowedBets([1, 2, 3, 4, 5]);
@@ -261,13 +279,9 @@ export default function Blackjack() {
   };
 
   async function onEnterBetting() {
-    // In the new contract, we just start a new game directly from WaitingForBet
-    // But if we need to reset state, we can do it here.
-    // The contract handles state transitions.
-    // If the phase is RoundComplete, we might need a way to acknowledge it, 
-    // but typically we just place a new bet.
-    // For now, we'll just refresh to ensure we are in sync.
-    await refresh();
+    if (busy) return;
+    // Call the contract to transition state and clear the board
+    await handleAction("reset");
   }
 
   async function onStartGame() {
@@ -284,6 +298,11 @@ export default function Blackjack() {
   async function onStand() {
     if (busy || phase !== "PlayerTurn") return;
     await handleAction("stand");
+  }
+
+  async function onRequestChips() {
+    if (busy) return;
+    await handleAction("requestChips");
   }
 
   function onRepeatBet() {
@@ -357,6 +376,15 @@ export default function Blackjack() {
               <p className="text-green-200 text-sm">
                 Balance: <span className="font-semibold text-green-400">{balance}</span>{" "}
                 • Current bet: <span className="font-semibold text-green-400">{currentBet}</span>
+                {balance === 0 && (
+                  <button
+                    onClick={onRequestChips}
+                    disabled={busy}
+                    className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
+                  >
+                    + Buy Chips (Free)
+                  </button>
+                )}
               </p>
             </div>
 
@@ -385,8 +413,8 @@ export default function Blackjack() {
                       onClick={() => setBet(chipValue)}
                       disabled={busy || balance < chipValue}
                       className={`relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg ${bet === chipValue
-                          ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                          : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
+                        ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
+                        : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
                         } disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       {chipValue}
@@ -434,13 +462,22 @@ export default function Blackjack() {
                   {renderResult(lastResult)}
                 </div>
               </div>
-              <button
-                onClick={onEnterBetting}
-                disabled={busy}
-                className="px-10 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-xl text-xl disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
-              >
-                {busy ? "⏳ Starting..." : "Play Next Round"}
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={onEnterBetting}
+                  disabled={busy}
+                  className="px-8 py-4 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg shadow-xl text-xl disabled:opacity-50 transition-all"
+                >
+                  Stop Play
+                </button>
+                <button
+                  onClick={onEnterBetting}
+                  disabled={busy}
+                  className="px-10 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-xl text-xl disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
+                >
+                  {busy ? "⏳ Starting..." : "Play Next Round"}
+                </button>
+              </div>
             </div>
           )}
 
@@ -459,8 +496,8 @@ export default function Blackjack() {
                       onClick={() => setBet(chipValue)}
                       disabled={busy || balance < chipValue}
                       className={`relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg ${bet === chipValue
-                          ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                          : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
+                        ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
+                        : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
                         } disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       {chipValue}
@@ -564,10 +601,10 @@ export default function Blackjack() {
                       <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden border-2 border-yellow-600">
                         <div
                           className={`h-full transition-all duration-300 ${timeRemaining > 10
-                              ? "bg-gradient-to-r from-green-500 to-green-600"
-                              : timeRemaining > 5
-                                ? "bg-gradient-to-r from-yellow-500 to-orange-500"
-                                : "bg-gradient-to-r from-red-500 to-red-700 animate-pulse"
+                            ? "bg-gradient-to-r from-green-500 to-green-600"
+                            : timeRemaining > 5
+                              ? "bg-gradient-to-r from-yellow-500 to-orange-500"
+                              : "bg-gradient-to-r from-red-500 to-red-700 animate-pulse"
                             }`}
                           style={{ width: `${(timeRemaining / 20) * 100}%` }}
                         />
@@ -662,10 +699,10 @@ export default function Blackjack() {
                         <div
                           key={actualIdx}
                           className={`border-2 rounded-lg p-4 ${isWin
-                              ? "border-green-500 bg-green-900/20"
-                              : isPush
-                                ? "border-yellow-500 bg-yellow-900/20"
-                                : "border-red-500 bg-red-900/20"
+                            ? "border-green-500 bg-green-900/20"
+                            : isPush
+                              ? "border-yellow-500 bg-yellow-900/20"
+                              : "border-red-500 bg-red-900/20"
                             }`}
                         >
                           <div className="flex justify-between items-start mb-3">

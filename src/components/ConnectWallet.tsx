@@ -13,7 +13,7 @@ export default function ConnectWallet() {
             if (primaryWallet && !lineraAdapter.isChainConnected()) {
                 try {
                     setIsConnecting(true);
-                    const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'http://localhost:8079';
+                    const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
                     const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
                     setLineraData({
                         chainId: provider.chainId,
