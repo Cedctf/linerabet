@@ -10,19 +10,28 @@ export default function ConnectWallet() {
     // Connect to Linera when Dynamic wallet is available
     useEffect(() => {
         const connectToLinera = async () => {
-            if (primaryWallet && !lineraAdapter.isChainConnected()) {
-                try {
-                    setIsConnecting(true);
-                    const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
-                    const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
+            if (primaryWallet) {
+                if (!lineraAdapter.isChainConnected()) {
+                    try {
+                        setIsConnecting(true);
+                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
+                        const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
+                        setLineraData({
+                            chainId: provider.chainId,
+                            address: provider.address
+                        });
+                    } catch (error) {
+                        console.error("Failed to connect to Linera:", error);
+                    } finally {
+                        setIsConnecting(false);
+                    }
+                } else {
+                    // Already connected, just sync state
+                    const provider = lineraAdapter.getProvider();
                     setLineraData({
                         chainId: provider.chainId,
                         address: provider.address
                     });
-                } catch (error) {
-                    console.error("Failed to connect to Linera:", error);
-                } finally {
-                    setIsConnecting(false);
                 }
             } else if (!primaryWallet) {
                 setLineraData(null);
