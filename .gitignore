@@ -26,3 +26,6 @@ dist-ssr
 *.sw?
 package-lock.json
 Cargo.lock
+
+
+examples

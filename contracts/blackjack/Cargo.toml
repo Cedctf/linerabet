@@ -12,6 +12,7 @@ path = "src/lib.rs"
 # Match your linera-sdk version
 linera-sdk = "0.15.4"
 linera-views = "0.15.4"
+linera-base = "0.15.4"
 
 async-graphql = { version = "=7.0.17", default-features = false }
 futures = { version = "0.3" }
