@@ -3,7 +3,6 @@ use linera_sdk::views::{linera_views, CollectionView, LogView, RegisterView, Roo
 use serde::{Deserialize, Serialize};
 
 pub const ALLOWED_BETS: [u64; 5] = [1, 2, 3, 4, 5];
-pub const PLAYER_TURN_TIMER_SECONDS: u64 = 20;
 
 use linera_base::identifiers::AccountOwner as Owner;
 
@@ -27,7 +26,6 @@ pub struct PlayerStateView {
     pub phase: RegisterView<GamePhase>,
     pub last_result: RegisterView<Option<GameResult>>,
     pub random_seed: RegisterView<u64>,
-    pub round_start_time: RegisterView<u64>,
     pub game_history: LogView<GameRecord>,
 }
 

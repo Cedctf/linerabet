@@ -85,7 +85,6 @@ impl QueryRoot {
             player_hand: player_view.player_hand.get().clone(),
             dealer_hand: player_view.dealer_hand.get().clone(),
             allowed_bets: ALLOWED_BETS.to_vec(),
-            round_start_time: *player_view.round_start_time.get(),
             game_history: history,
         })
     }
@@ -100,7 +99,6 @@ struct PlayerStateObject {
     player_hand: Vec<Card>,
     dealer_hand: Vec<Card>,
     allowed_bets: Vec<u64>,
-    round_start_time: u64,
     game_history: Vec<GameRecord>,
 }
 
