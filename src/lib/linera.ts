@@ -1,46 +1,21 @@
 // src/lib/linera.ts
-
-// Safe URL resolution for both server & browser:
-function resolveServiceUrl(): string {
-  // 1) Build-time env (Next.js will inline this when available)
-  const fromBuild =
-    // eslint-disable-next-line no-undef
-    (typeof process !== "undefined" && (process as any).env?.NEXT_PUBLIC_LINERA_SERVICE_URL) ||
-    undefined;
-
-  // 2) <meta name="linera-service-url" content="..."> (optional, runtime override)
-  const fromMeta =
-    typeof document !== "undefined"
-      ? document.querySelector('meta[name="linera-service-url"]')?.getAttribute("content") ??
-        undefined
-      : undefined;
-
-  // 3) Hardcoded default (TESTNET)
-  const fallback =
-    "http://localhost:8080/chains/503a882ee3d12921f772699e47db7c7035381a1f54a68322ed8df8aa80ccf846/applications/e9d1d166e03b05b053dbc7f7aaa136e55159d7dea6c65ac361b7230c7758cc1b";
-
-  return fromBuild || fromMeta || fallback;
-}
-
-export const LINERA_SERVICE_URL = resolveServiceUrl();
+import { lineraAdapter } from "./linera-adapter";
 
 type GqlPayload = { query: string; variables?: Record<string, unknown> };
 
 export async function gql<T = any>(body: GqlPayload): Promise<T> {
-  const res = await fetch(LINERA_SERVICE_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GraphQL ${res.status}: ${text}`);
+  // Use the adapter to query the application directly via WASM
+  // This avoids needing a separate local service running on port 8080
+  try {
+    const result = await lineraAdapter.queryApplication<any>(body);
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((e: any) => e.message).join("; "));
+    }
+    return result.data as T;
+  } catch (error) {
+    console.error("GraphQL Query Error:", error);
+    throw error;
   }
-  const data = await res.json();
-  if (data.errors?.length) {
-    throw new Error(data.errors.map((e: any) => e.message).join("; "));
-  }
-  return data.data as T;
 }
 
 // NOTE: Your service returns CamelCase enums.
@@ -62,13 +37,13 @@ export async function fetchState() {
     allowedBets: number[];
     phase: "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
     lastResult:
-      | null
-      | "PlayerBlackjack"
-      | "PlayerWin"
-      | "DealerWin"
-      | "PlayerBust"
-      | "DealerBust"
-      | "Push";
+    | null
+    | "PlayerBlackjack"
+    | "PlayerWin"
+    | "DealerWin"
+    | "PlayerBust"
+    | "DealerBust"
+    | "Push";
     playerHand: { suit: string; value: string; id: string }[];
     dealerHand: { suit: string; value: string; id: string }[];
     roundStartTime: number;

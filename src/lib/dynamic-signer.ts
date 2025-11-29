@@ -62,5 +62,3 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
     .map((b: number) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-
