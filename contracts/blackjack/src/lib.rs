@@ -27,12 +27,15 @@ pub struct BlackjackInit {
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    /// Enter betting phase.
-    EnterBettingPhase,
+    /// Reset the game state to WaitingForBet.
+    Reset,
     /// Lock in the bet and start the game (deal cards). Starts a 20-second player turn timer.
     StartGame { bet: u64 },
     /// Request one additional card for the player. Resets the 20-second timer. Auto-stands if timer expires.
     Hit,
     /// Stop drawing player cards and let the dealer resolve the round.
+    /// Stop drawing player cards and let the dealer resolve the round.
     Stand,
+    /// Request chips to reset balance to 100 (Testnet Faucet).
+    RequestChips,
 }
