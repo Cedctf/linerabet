@@ -12,6 +12,7 @@ pub struct ContractsState {
     pub players: CollectionView<Owner, PlayerStateView>,
     pub default_buy_in: RegisterView<u64>,
     pub master_seed: RegisterView<u64>,
+    pub deployer: RegisterView<Option<Owner>>,
 }
 
 #[derive(RootView)]

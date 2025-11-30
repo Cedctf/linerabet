@@ -8,7 +8,7 @@ import {
 import { lineraAdapter } from "@/lib/linera-adapter";
 
 // New Multi-User Blackjack Application ID
-const BLACKJACK_APP_ID = "412358d7a5ec0149fad3487628b86716d9efd68466e059d0648db7c982aab9a1";
+const BLACKJACK_APP_ID = "8382f4247cf42d835b7702cc642a942ebd7fd801e6baa49e78146ce0cb4422a2";
 
 // GraphQL returns UPPER_SNAKE_CASE enums on your network.
 type Phase = "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
@@ -47,6 +47,7 @@ interface PlayerState {
 interface QueryResponse {
   player: PlayerState | null;
   defaultBuyIn: number;
+  deployer: string;
 }
 
 /** Convert chain cards ("2","3",...,"10","jack","queen","king","ace") to BlackjackCard (2..10 | faces) */
@@ -104,6 +105,7 @@ export default function Blackjack() {
   const [playerHand, setPlayerHand] = useState<BlackjackCard[]>([]);
   const [dealerHand, setDealerHand] = useState<BlackjackCard[]>([]);
   const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);
+  const [deployerAddress, setDeployerAddress] = useState<string | null>(null);
 
   // UI
   const [busy, setBusy] = useState(false);
@@ -135,6 +137,14 @@ export default function Blackjack() {
         await lineraAdapter.setApplication(BLACKJACK_APP_ID);
       }
 
+      console.log("Debug: lineraAdapter keys:", Object.keys(lineraAdapter));
+      // console.log("Debug: lineraAdapter prototype:", Object.getPrototypeOf(lineraAdapter));
+
+      if (typeof lineraAdapter.identity !== 'function') {
+        console.error("CRITICAL: lineraAdapter.identity is missing!", lineraAdapter);
+        return;
+      }
+
       const owner = lineraAdapter.identity();
       const query = `
         query GetPlayerState($owner: AccountOwner!) {
@@ -163,12 +173,21 @@ export default function Blackjack() {
               timestamp
             }
           }
+
           defaultBuyIn
+          deployer
         }
       `;
 
       const data = await lineraAdapter.queryApplication<QueryResponse>(query, { owner });
       console.log("State refreshed:", data);
+
+      if (data.deployer) {
+        setDeployerAddress(data.deployer);
+      } else {
+        console.warn("Deployer address not found in state, using hardcoded fallback.");
+        setDeployerAddress("0xef4a68d80af8ae3082ef5549f2fc8a5bb930f3a0f6e69333e0b0af925efe2986");
+      }
 
       if (data.player) {
         // Check for "new player" state: 0 balance and no history.
@@ -266,13 +285,29 @@ export default function Blackjack() {
       .map((key) => `${key}: ${(args as any)[key]}`)
       .join(", ");
     return `(${formatted})`;
-  };
+  }
+
 
   const handleAction = async (action: string, args: object = {}) => {
     setBusy(true);
     try {
-      const mutation = `mutation ${action} { ${action}${formatArgs(args)} }`;
-      await lineraAdapter.queryApplication(mutation);
+      let mutation: string;
+
+      // Construct GraphQL mutation
+      if (action === "requestChips") {
+        mutation = `mutation { requestChips }`;
+      } else if (action === "startGame") {
+        const bet = (args as any).bet;
+        mutation = `mutation { startGame(bet: ${bet}) }`;
+      } else if (action === "hit") {
+        mutation = `mutation { hit }`;
+      } else if (action === "stand") {
+        mutation = `mutation { stand }`;
+      } else {
+        throw new Error(`Unknown action: ${action}`);
+      }
+
+      await lineraAdapter.mutate(mutation);
       await refresh();
     } catch (err: any) {
       console.error(`Failed to execute ${action}:`, err);
@@ -309,7 +344,40 @@ export default function Blackjack() {
 
   async function onRequestChips() {
     if (busy) return;
-    await handleAction("requestChips");
+
+    if (!deployerAddress) {
+      console.error("Deployer address not found");
+      alert("Cannot buy chips: Contract deployer address unknown.");
+      return;
+    }
+
+    if (!confirm(`Buy 100 chips for 1 Linera Token?\n\nPayment will be sent to: ${deployerAddress.slice(0, 8)}...`)) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      // 1. Transfer 1 token to deployer
+      const chainId = lineraAdapter.getProvider().chainId;
+      await lineraAdapter.client.transfer({
+        recipient: {
+          chain_id: chainId,
+          owner: deployerAddress,
+        },
+        amount: 1,
+      });
+
+      // 2. Request chips from contract
+      await handleAction("requestChips");
+
+      // 3. Refresh to show new balance
+      await refresh();
+    } catch (err: any) {
+      console.error("Failed to buy chips:", err);
+      alert(`Failed to buy chips: ${err.message || err}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function onRepeatBet() {
@@ -389,7 +457,7 @@ export default function Blackjack() {
                     disabled={busy}
                     className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
                   >
-                    + Buy Chips (Free)
+                    + Buy Chips (1 Token)
                   </button>
                 )}
               </p>

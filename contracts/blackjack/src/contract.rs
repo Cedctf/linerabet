@@ -55,6 +55,10 @@ impl Contract for ContractsContract {
             argument.random_seed
         };
         self.state.master_seed.set(master_seed);
+        
+        // Set deployer address
+        let signer = self.runtime.authenticated_signer().expect("User must be signed in to instantiate");
+        self.state.deployer.set(Some(signer));
     }
 
     async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Response {
@@ -99,8 +103,9 @@ impl Contract for ContractsContract {
             }
             Operation::RequestChips => {
                 let player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
-                // Reset balance to default buy-in (100)
-                player.player_balance.set(100); 
+                // Add 100 chips to existing balance
+                let current_balance = *player.player_balance.get();
+                player.player_balance.set(current_balance.saturating_add(100)); 
                 // Also ensure phase is reset if they were stuck
                 if *player.player_balance.get() > 0 && *player.phase.get() == GamePhase::RoundComplete {
                      player.phase.set(GamePhase::WaitingForBet);

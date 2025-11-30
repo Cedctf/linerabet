@@ -16,7 +16,21 @@ export default function ConnectWallet() {
                         setIsConnecting(true);
                         const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
                         const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
-                        const balance = await provider.client.balance();
+
+                        let balance = "0";
+                        try {
+                            balance = await provider.client.balance();
+                        } catch (e) {
+                            console.warn("Failed to fetch initial balance, retrying in 1s...", e);
+                            await new Promise(r => setTimeout(r, 1000));
+                            try {
+                                balance = await provider.client.balance();
+                            } catch (e2) {
+                                console.error("Failed to fetch balance after retry:", e2);
+                                // Continue with 0 balance rather than failing connection
+                            }
+                        }
+
                         setLineraData({
                             chainId: provider.chainId,
                             address: provider.address,
@@ -44,7 +58,25 @@ export default function ConnectWallet() {
         };
 
         connectToLinera();
+        connectToLinera();
     }, [primaryWallet]);
+
+    // Poll for balance updates
+    useEffect(() => {
+        if (!lineraData) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const provider = lineraAdapter.getProvider();
+                const balance = await provider.client.balance();
+                setLineraData(prev => prev ? { ...prev, balance } : null);
+            } catch (error) {
+                console.error("Failed to poll balance:", error);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [lineraData]);
 
     if (primaryWallet && lineraData) {
         return (

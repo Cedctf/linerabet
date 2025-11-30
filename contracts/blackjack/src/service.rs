@@ -65,6 +65,11 @@ impl QueryRoot {
         *state.default_buy_in.get()
     }
 
+    async fn deployer(&self) -> Option<Owner> {
+        let state = self.state.lock().await;
+        *state.deployer.get()
+    }
+
     async fn player(&self, owner: Owner) -> Option<PlayerStateObject> {
         let mut state = self.state.lock().await;
         let player_view = state.players.load_entry_mut(&owner).await.ok()?;
