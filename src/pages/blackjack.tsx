@@ -451,15 +451,13 @@ export default function Blackjack() {
               <p className="text-green-200 text-sm">
                 Balance: <span className="font-semibold text-green-400">{balance}</span>{" "}
                 • Current bet: <span className="font-semibold text-green-400">{currentBet}</span>
-                {balance === 0 && (
-                  <button
-                    onClick={onRequestChips}
-                    disabled={busy}
-                    className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
-                  >
-                    + Buy Chips (1 Token)
-                  </button>
-                )}
+                <button
+                  onClick={onRequestChips}
+                  disabled={busy}
+                  className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
+                >
+                  + Buy Chips (1 Token)
+                </button>
               </p>
             </div>
 
