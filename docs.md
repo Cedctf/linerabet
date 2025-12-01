@@ -354,3 +354,224 @@ linera publish-and-create \
 ---
 
 *Happy shipping on Linera!*
+
+---
+
+## Game Mechanics & Code Deep Dive
+
+This section details exactly how the Blackjack frontend talks to the Linera blockchain, from the initial connection to every game action.
+
+### 1. Connection & Setup
+
+Before any game actions can occur, the frontend must establish a connection to the Linera network and identify the specific Blackjack application.
+
+#### A. The Adapter (`src/lib/linera-adapter.ts`)
+We use a singleton `LineraAdapter` to manage the connection. It wraps the standard `@linera/client` and integrates with the Dynamic wallet.
+
+**Key Code: Connecting to Testnet**
+```typescript
+// src/lib/linera-adapter.ts
+async connect(dynamicWallet: DynamicWallet, rpcUrl: string): Promise<LineraProvider> {
+    // 1. Initialize WASM
+    await initLinera();
+
+    // 2. Connect to Faucet (Testnet)
+    const faucet = await new Faucet(rpcUrl);
+    const wallet = await faucet.createWallet();
+
+    // 3. Claim a Chain for the User
+    // This gives the user their own microchain ID on the testnet
+    const chainId = await faucet.claimChain(wallet, dynamicWallet.address);
+
+    // 4. Create the Client with our Custom Signer
+    const signer = await new DynamicSigner(dynamicWallet);
+    const client = await new Client(wallet, signer);
+
+    return { client, wallet, faucet, chainId, address: dynamicWallet.address };
+}
+```
+
+#### B. Setting the Application ID (`src/pages/blackjack.tsx`)
+The frontend needs to know *which* smart contract to talk to. This is defined by the `BLACKJACK_APP_ID`.
+
+```typescript
+// src/pages/blackjack.tsx
+const BLACKJACK_APP_ID = "8382f4247cf42d835b7702cc642a942ebd7fd801e6baa49e78146ce0cb4422a2";
+
+// Inside the component:
+if (!lineraAdapter.isApplicationSet()) {
+    await lineraAdapter.setApplication(BLACKJACK_APP_ID);
+}
+```
+
+---
+
+### 2. Game Flow: Add Money (Buying Chips)
+
+This is a unique two-step process: a **Transfer** followed by a **Mutation**.
+
+#### Step 1: Transfer Linera Tokens
+The user sends 1 Linera Token (TLIN) from their chain to the contract deployer's chain.
+
+**Frontend Code:**
+```typescript
+// src/pages/blackjack.tsx
+async function onRequestChips() {
+    // ...
+    // 1. Transfer 1 token to deployer
+    await lineraAdapter.client.transfer({
+        recipient: {
+            chain_id: chainId,
+            owner: deployerAddress, // The address of the contract creator
+        },
+        amount: 1,
+    });
+    // ...
+}
+```
+
+#### Step 2: Request Chips Mutation
+After the transfer is successful, we tell the smart contract "I paid, give me chips".
+*Note: In a production mainnet app, the contract would verify the incoming transfer automatically. In this demo, we trust the client's claim for simplicity.*
+
+**Frontend Code:**
+```typescript
+// src/pages/blackjack.tsx
+await handleAction("requestChips");
+// Sends GraphQL mutation: mutation { requestChips }
+```
+
+**Smart Contract Code:**
+```rust
+// contracts/blackjack/src/contract.rs
+Operation::RequestChips => {
+    let player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
+    
+    // Add 100 chips to existing balance
+    let current_balance = *player.player_balance.get();
+    player.player_balance.set(current_balance.saturating_add(100)); 
+}
+```
+
+---
+
+### 3. Game Flow: Placing a Bet
+
+Starting a game involves committing chips and dealing the initial cards.
+
+**Frontend Code:**
+```typescript
+// src/pages/blackjack.tsx
+async function onStartGame() {
+    // Sends GraphQL mutation: mutation { startGame(bet: 5) }
+    await handleAction("startGame", { bet });
+}
+```
+
+**Smart Contract Code:**
+```rust
+// contracts/blackjack/src/contract.rs
+fn start_game(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, bet: u64) -> Result<(), String> {
+    // 1. Validate Bet
+    ensure!(ALLOWED_BETS.contains(&bet), "Bet must be one of 1,2,3,4,5");
+    ensure!(balance >= bet, "Insufficient balance");
+
+    // 2. Deal Cards (using deterministic RNG seeded by chain)
+    let mut deck = Self::new_shuffled_deck(player);
+    let player_card1 = draw_card(&mut deck);
+    let player_card2 = draw_card(&mut deck);
+    let dealer_up_card = draw_card(&mut deck);
+    let dealer_hole_card = draw_card(&mut deck); // Hidden!
+
+    // 3. Update State
+    player.dealer_hole_card.set(Some(dealer_hole_card)); // Store hidden card
+    player.dealer_hand.set(vec![dealer_up_card]);        // Show only up card
+    player.player_hand.set(vec![player_card1, player_card2]);
+    
+    // 4. Check Instant Blackjack
+    if player_value == 21 {
+        // Handle immediate win/push
+    } else {
+        player.phase.set(GamePhase::PlayerTurn);
+    }
+    Ok(())
+}
+```
+
+---
+
+### 4. Game Flow: Hitting
+
+The player requests another card.
+
+**Frontend Code:**
+```typescript
+// src/pages/blackjack.tsx
+async function onHit() {
+    // Sends GraphQL mutation: mutation { hit }
+    await handleAction("hit");
+}
+```
+
+**Smart Contract Code:**
+```rust
+// contracts/blackjack/src/contract.rs
+fn hit(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Result<(), String> {
+    // 1. Verify Phase
+    ensure!(matches!(*player.phase.get(), GamePhase::PlayerTurn), "Not player turn");
+
+    // 2. Draw Card
+    let mut deck = player.deck.get().clone();
+    let card = draw_card(&mut deck);
+    
+    // 3. Add to Hand
+    let mut player_hand = player.player_hand.get().clone();
+    player_hand.push(card);
+    player.player_hand.set(player_hand);
+
+    // 4. Check Bust
+    if calculate_hand_value(&player_hand) > 21 {
+        Self::apply_result(player, runtime, GameResult::PlayerBust);
+    }
+    Ok(())
+}
+```
+
+---
+
+### 5. Game Flow: Standing
+
+The player finishes their turn, and the dealer plays.
+
+**Frontend Code:**
+```typescript
+// src/pages/blackjack.tsx
+async function onStand() {
+    // Sends GraphQL mutation: mutation { stand }
+    await handleAction("stand");
+}
+```
+
+**Smart Contract Code:**
+```rust
+// contracts/blackjack/src/contract.rs
+fn stand(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Result<(), String> {
+    player.phase.set(GamePhase::DealerTurn);
+
+    // 1. Reveal Dealer's Hidden Card
+    Self::reveal_dealer_hole_card(player);
+    let mut dealer_hand = player.dealer_hand.get().clone();
+
+    // 2. Dealer Logic: Hit until 17
+    while calculate_hand_value(&dealer_hand) < 17 {
+        dealer_hand.push(draw_card(&mut deck));
+    }
+    player.dealer_hand.set(dealer_hand);
+
+    // 3. Determine Winner
+    let result = determine_winner(&player_hand, &dealer_hand);
+    Self::apply_result(player, runtime, result);
+
+    Ok(())
+}
+```
