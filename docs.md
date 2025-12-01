@@ -391,7 +391,38 @@ async connect(dynamicWallet: DynamicWallet, rpcUrl: string): Promise<LineraProvi
 }
 ```
 
-#### B. Setting the Application ID (`src/pages/blackjack.tsx`)
+#### B. The Signer (`src/lib/dynamic-signer.ts`)
+This is the critical bridge between the Linera SDK and the user's Ethereum wallet (e.g., MetaMask, embedded wallet).
+
+**Why is this needed?**
+Linera uses its own key format, but we want users to log in with Ethereum wallets. This signer intercepts Linera's signing requests and asks the Ethereum wallet to sign the data using `personal_sign`.
+
+**Key Code: Signing with Ethereum Wallet**
+```typescript
+// src/lib/dynamic-signer.ts
+export class DynamicSigner implements Signer {
+  constructor(dynamicWallet: DynamicWallet) {
+    this.dynamicWallet = dynamicWallet;
+  }
+
+  async sign(owner: string, value: Uint8Array): Promise<string> {
+    // Convert raw bytes to hex
+    const msgHex: `0x${string}` = `0x${uint8ArrayToHex(value)}`;
+
+    // CRITICAL: We use personal_sign directly.
+    // Standard 'signMessage' often double-hashes, which would break Linera verification.
+    const walletClient = await this.dynamicWallet.getWalletClient();
+    const signature = await walletClient.request({
+      method: "personal_sign",
+      params: [msgHex, address],
+    });
+
+    return signature;
+  }
+}
+```
+
+#### C. Setting the Application ID (`src/pages/blackjack.tsx`)
 The frontend needs to know *which* smart contract to talk to. This is defined by the `BLACKJACK_APP_ID`.
 
 ```typescript
@@ -406,7 +437,30 @@ if (!lineraAdapter.isApplicationSet()) {
 
 ---
 
-### 2. Game Flow: Add Money (Buying Chips)
+### 2. Transaction Lifecycle: How a Move is Signed
+
+When a user clicks a button (e.g., "Hit"), the following chain of events occurs:
+
+1.  **Frontend** calls `lineraAdapter.mutate("mutation { hit }")`.
+2.  **Adapter** wraps this in a query and sends it to the Linera **Client**.
+3.  **Client** constructs a new block containing this operation.
+4.  **Client** asks the **Signer** to sign the block hash.
+5.  **Signer** requests the **Wallet** (Dynamic) to sign via `personal_sign`.
+6.  **Client** attaches the signature and submits the block to the network.
+
+**Adapter Code:**
+```typescript
+// src/lib/linera-adapter.ts
+async mutate(mutation: string): Promise<any> {
+    // The client processes the mutation, triggering the signing flow automatically
+    const result = await this.application.query(JSON.stringify({ query: mutation }));
+    return JSON.parse(result).data;
+}
+```
+
+---
+
+### 3. Game Flow: Add Money (Buying Chips)
 
 This is a unique two-step process: a **Transfer** followed by a **Mutation**.
 
@@ -455,7 +509,7 @@ Operation::RequestChips => {
 
 ---
 
-### 3. Game Flow: Placing a Bet
+### 4. Game Flow: Placing a Bet
 
 Starting a game involves committing chips and dealing the initial cards.
 
@@ -500,7 +554,7 @@ fn start_game(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>,
 
 ---
 
-### 4. Game Flow: Hitting
+### 5. Game Flow: Hitting
 
 The player requests another card.
 
@@ -539,7 +593,7 @@ fn hit(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Res
 
 ---
 
-### 5. Game Flow: Standing
+### 6. Game Flow: Standing
 
 The player finishes their turn, and the dealer plays.
 
@@ -575,3 +629,4 @@ fn stand(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> R
     Ok(())
 }
 ```
+
