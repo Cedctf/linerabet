@@ -11,7 +11,7 @@ use linera_sdk::{
 
 use contracts::{BlackjackInit, Operation};
 
-use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, ALLOWED_BETS, PLAYER_TURN_TIMER_SECONDS};
+use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, ALLOWED_BETS};
 
 const SUITS: [&str; 4] = ["clubs", "diamonds", "hearts", "spades"];
 const VALUES: [&str; 13] = [
@@ -55,6 +55,10 @@ impl Contract for ContractsContract {
             argument.random_seed
         };
         self.state.master_seed.set(master_seed);
+        
+        // Set deployer address
+        let signer = self.runtime.authenticated_signer().expect("User must be signed in to instantiate");
+        self.state.deployer.set(Some(signer));
     }
 
     async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Response {
@@ -98,9 +102,10 @@ impl Contract for ContractsContract {
                 }
             }
             Operation::RequestChips => {
-                let mut player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
-                // Reset balance to default buy-in (100)
-                player.player_balance.set(100); 
+                let player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
+                // Add 100 chips to existing balance
+                let current_balance = *player.player_balance.get();
+                player.player_balance.set(current_balance.saturating_add(100)); 
                 // Also ensure phase is reset if they were stuck
                 if *player.player_balance.get() > 0 && *player.phase.get() == GamePhase::RoundComplete {
                      player.phase.set(GamePhase::WaitingForBet);
@@ -184,10 +189,6 @@ impl ContractsContract {
                 Self::apply_result(player, runtime, GameResult::PlayerBlackjack);
             }
         } else {
-            // Start player turn timer (20 seconds)
-            let now_timestamp = runtime.system_time();
-            let now_micros = now_timestamp.micros();
-            player.round_start_time.set(now_micros);
             player.phase.set(GamePhase::PlayerTurn);
         }
 
@@ -201,19 +202,7 @@ impl ContractsContract {
             "You can only hit during the player's turn"
         );
 
-        // Check if player turn timer expired (20 seconds)
-        let round_start = *player.round_start_time.get();
-        if round_start > 0 {
-            let now_timestamp = runtime.system_time();
-            let now_micros = now_timestamp.micros();
-            let elapsed_micros = now_micros.saturating_sub(round_start);
-            let elapsed_seconds = elapsed_micros / 1_000_000;
 
-            if elapsed_seconds >= PLAYER_TURN_TIMER_SECONDS {
-                // Timer expired - auto-stand instead of hit
-                return Self::stand(player, runtime);
-            }
-        }
 
         let mut deck = player.deck.get().clone();
         ensure!(!deck.is_empty(), "The shoe is exhausted");
@@ -223,10 +212,7 @@ impl ContractsContract {
         player.deck.set(deck);
         player.player_hand.set(player_hand.clone());
 
-        // Reset timer after each hit
-        let now_timestamp = runtime.system_time();
-        let now_micros = now_timestamp.micros();
-        player.round_start_time.set(now_micros);
+
 
         if calculate_hand_value(&player_hand) > 21 {
             // Reveal dealer's hole card before ending round
@@ -244,8 +230,7 @@ impl ContractsContract {
             "You can only stand during the player's turn"
         );
 
-        // Clear player turn timer
-        player.round_start_time.set(0);
+
         player.phase.set(GamePhase::DealerTurn);
 
         // Reveal the dealer's hole card
@@ -323,7 +308,7 @@ impl ContractsContract {
         player.current_bet.set(0);
         player.phase.set(GamePhase::RoundComplete);
         player.last_result.set(Some(result));
-        player.round_start_time.set(0);
+        player.last_result.set(Some(result));
     }
 
     fn new_shuffled_deck(player: &mut PlayerStateView) -> Vec<Card> {

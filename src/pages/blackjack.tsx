@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import CardComp from "../components/Card";
 import Header from "../components/Header";
 import {
@@ -8,7 +8,7 @@ import {
 import { lineraAdapter } from "@/lib/linera-adapter";
 
 // New Multi-User Blackjack Application ID
-const BLACKJACK_APP_ID = "56877dab466ae86fe6707da275dbaf8d4bb51a1a05fdad8304d55535f9e0018b";
+const BLACKJACK_APP_ID = "8382f4247cf42d835b7702cc642a942ebd7fd801e6baa49e78146ce0cb4422a2";
 
 // GraphQL returns UPPER_SNAKE_CASE enums on your network.
 type Phase = "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
@@ -41,13 +41,13 @@ interface PlayerState {
   playerHand: ChainCard[];
   dealerHand: ChainCard[];
   allowedBets: number[];
-  roundStartTime: number;
   gameHistory: GameRecord[];
 }
 
 interface QueryResponse {
   player: PlayerState | null;
   defaultBuyIn: number;
+  deployer: string;
 }
 
 /** Convert chain cards ("2","3",...,"10","jack","queen","king","ace") to BlackjackCard (2..10 | faces) */
@@ -99,16 +99,16 @@ export default function Blackjack() {
   const [lastBet, setLastBet] = useState<number>(1);
 
   const [phase, setPhase] = useState<Phase>("WaitingForBet");
+  const phaseRef = useRef<Phase>("WaitingForBet");
   const [lastResult, setLastResult] = useState<Result>(null);
 
   const [playerHand, setPlayerHand] = useState<BlackjackCard[]>([]);
   const [dealerHand, setDealerHand] = useState<BlackjackCard[]>([]);
-  const [roundStartTime, setRoundStartTime] = useState<number>(0);
   const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);
+  const [deployerAddress, setDeployerAddress] = useState<string | null>(null);
 
   // UI
   const [busy, setBusy] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState<number>(20);
   const [showHistory, setShowHistory] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -137,6 +137,14 @@ export default function Blackjack() {
         await lineraAdapter.setApplication(BLACKJACK_APP_ID);
       }
 
+      console.log("Debug: lineraAdapter keys:", Object.keys(lineraAdapter));
+      // console.log("Debug: lineraAdapter prototype:", Object.getPrototypeOf(lineraAdapter));
+
+      if (typeof lineraAdapter.identity !== 'function') {
+        console.error("CRITICAL: lineraAdapter.identity is missing!", lineraAdapter);
+        return;
+      }
+
       const owner = lineraAdapter.identity();
       const query = `
         query GetPlayerState($owner: AccountOwner!) {
@@ -156,7 +164,6 @@ export default function Blackjack() {
               id
             }
             allowedBets
-            roundStartTime
             gameHistory {
               playerHand { suit value }
               dealerHand { suit value }
@@ -166,12 +173,21 @@ export default function Blackjack() {
               timestamp
             }
           }
+
           defaultBuyIn
+          deployer
         }
       `;
 
       const data = await lineraAdapter.queryApplication<QueryResponse>(query, { owner });
       console.log("State refreshed:", data);
+
+      if (data.deployer) {
+        setDeployerAddress(data.deployer);
+      } else {
+        console.warn("Deployer address not found in state, using hardcoded fallback.");
+        setDeployerAddress("0xef4a68d80af8ae3082ef5549f2fc8a5bb930f3a0f6e69333e0b0af925efe2986");
+      }
 
       if (data.player) {
         // Check for "new player" state: 0 balance and no history.
@@ -183,16 +199,41 @@ export default function Blackjack() {
         setCurrentBet(data.player.currentBet);
         setAllowedBets(data.player.allowedBets);
         if (!data.player.allowedBets.includes(bet)) setBet(data.player.allowedBets[0] ?? 1);
-        setPhase(normalizePhase(data.player.phase));
+
+        const chainPhase = normalizePhase(data.player.phase);
+        let effectivePhase = chainPhase;
+
+        // If the chain thinks we are done, but we have locally moved to betting, keep betting.
+        // This allows "Next Round" to be instant without a transaction.
+        if (chainPhase === "RoundComplete" && (phaseRef.current === "WaitingForBet" || phaseRef.current === "BettingPhase")) {
+          effectivePhase = phaseRef.current;
+        } else {
+          // Sync with chain
+          effectivePhase = chainPhase;
+          phaseRef.current = chainPhase;
+        }
+
+        setPhase(effectivePhase);
         setLastResult(data.player.lastResult);
-        setPlayerHand(normalizeCards(data.player.playerHand));
-        setDealerHand(normalizeCards(data.player.dealerHand));
-        setRoundStartTime(data.player.roundStartTime);
+
+        // Only update hands if we are not in a local "new game" state that hasn't hit chain yet
+        // (Though usually we want chain state. The only exception is if we cleared hands locally.)
+        // If we are locally WaitingForBet, we expect empty hands.
+        if (effectivePhase === "WaitingForBet") {
+          setPlayerHand([]);
+          setDealerHand([]);
+        } else {
+          setPlayerHand(normalizeCards(data.player.playerHand));
+          setDealerHand(normalizeCards(data.player.dealerHand));
+        }
+
         setGameHistory(data.player.gameHistory);
       } else {
         // Fallback if player is null (though likely covered by above due to default view)
         setBalance(data.defaultBuyIn);
+        setBalance(data.defaultBuyIn);
         setPhase("WaitingForBet");
+        phaseRef.current = "WaitingForBet";
         setAllowedBets([1, 2, 3, 4, 5]);
         setPlayerHand([]);
         setDealerHand([]);
@@ -234,26 +275,7 @@ export default function Blackjack() {
   }, [busy, isConnected, refresh]);
 
 
-  // Player turn timer countdown effect
-  useEffect(() => {
-    if (phase === "PlayerTurn" && roundStartTime > 0) {
-      const timer = setInterval(() => {
-        const now = Date.now() * 1000; // convert to micros
-        const elapsed = (now - roundStartTime) / 1_000_000; // convert to seconds
-        const remaining = Math.max(0, 20 - Math.floor(elapsed));
-        setTimeRemaining(remaining);
 
-        // If timer expires, auto-stand
-        if (remaining === 0 && !busy) {
-          clearInterval(timer);
-          if (phase === "PlayerTurn") {
-            onStand().catch(console.error);
-          }
-        }
-      }, 100);
-      return () => clearInterval(timer);
-    }
-  }, [phase, roundStartTime, busy]);
 
   // Helper to format args for GraphQL
   const formatArgs = (args: object) => {
@@ -263,13 +285,29 @@ export default function Blackjack() {
       .map((key) => `${key}: ${(args as any)[key]}`)
       .join(", ");
     return `(${formatted})`;
-  };
+  }
+
 
   const handleAction = async (action: string, args: object = {}) => {
     setBusy(true);
     try {
-      const mutation = `mutation ${action} { ${action}${formatArgs(args)} }`;
-      await lineraAdapter.queryApplication(mutation);
+      let mutation: string;
+
+      // Construct GraphQL mutation
+      if (action === "requestChips") {
+        mutation = `mutation { requestChips }`;
+      } else if (action === "startGame") {
+        const bet = (args as any).bet;
+        mutation = `mutation { startGame(bet: ${bet}) }`;
+      } else if (action === "hit") {
+        mutation = `mutation { hit }`;
+      } else if (action === "stand") {
+        mutation = `mutation { stand }`;
+      } else {
+        throw new Error(`Unknown action: ${action}`);
+      }
+
+      await lineraAdapter.mutate(mutation);
       await refresh();
     } catch (err: any) {
       console.error(`Failed to execute ${action}:`, err);
@@ -280,8 +318,12 @@ export default function Blackjack() {
 
   async function onEnterBetting() {
     if (busy) return;
-    // Call the contract to transition state and clear the board
-    await handleAction("reset");
+    // Local reset only - no transaction needed
+    setPhase("WaitingForBet");
+    phaseRef.current = "WaitingForBet";
+    setPlayerHand([]);
+    setDealerHand([]);
+    setLastResult(null);
   }
 
   async function onStartGame() {
@@ -302,7 +344,40 @@ export default function Blackjack() {
 
   async function onRequestChips() {
     if (busy) return;
-    await handleAction("requestChips");
+
+    if (!deployerAddress) {
+      console.error("Deployer address not found");
+      alert("Cannot buy chips: Contract deployer address unknown.");
+      return;
+    }
+
+    if (!confirm(`Buy 100 chips for 1 Linera Token?\n\nPayment will be sent to: ${deployerAddress.slice(0, 8)}...`)) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      // 1. Transfer 1 token to deployer
+      const chainId = lineraAdapter.getProvider().chainId;
+      await lineraAdapter.client.transfer({
+        recipient: {
+          chain_id: chainId,
+          owner: deployerAddress,
+        },
+        amount: 1,
+      });
+
+      // 2. Request chips from contract
+      await handleAction("requestChips");
+
+      // 3. Refresh to show new balance
+      await refresh();
+    } catch (err: any) {
+      console.error("Failed to buy chips:", err);
+      alert(`Failed to buy chips: ${err.message || err}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function onRepeatBet() {
@@ -376,15 +451,13 @@ export default function Blackjack() {
               <p className="text-green-200 text-sm">
                 Balance: <span className="font-semibold text-green-400">{balance}</span>{" "}
                 • Current bet: <span className="font-semibold text-green-400">{currentBet}</span>
-                {balance === 0 && (
-                  <button
-                    onClick={onRequestChips}
-                    disabled={busy}
-                    className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
-                  >
-                    + Buy Chips (Free)
-                  </button>
-                )}
+                <button
+                  onClick={onRequestChips}
+                  disabled={busy}
+                  className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
+                >
+                  + Buy Chips (1 Token)
+                </button>
               </p>
             </div>
 
@@ -590,31 +663,7 @@ export default function Blackjack() {
 
             {canPlay && (
               <div className="flex flex-col gap-3 items-center">
-                {/* Player Turn Timer */}
-                {roundStartTime > 0 && (
-                  <div className="w-full max-w-md bg-yellow-900/30 p-4 rounded-lg border-2 border-yellow-600/50 shadow-xl">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className={`text-2xl font-bold ${timeRemaining > 10 ? "text-yellow-300" : "text-red-400 animate-pulse"
-                        }`}>
-                        ⏱️ Time to act: {timeRemaining}s
-                      </div>
-                      <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden border-2 border-yellow-600">
-                        <div
-                          className={`h-full transition-all duration-300 ${timeRemaining > 10
-                            ? "bg-gradient-to-r from-green-500 to-green-600"
-                            : timeRemaining > 5
-                              ? "bg-gradient-to-r from-yellow-500 to-orange-500"
-                              : "bg-gradient-to-r from-red-500 to-red-700 animate-pulse"
-                            }`}
-                          style={{ width: `${(timeRemaining / 20) * 100}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-yellow-200">
-                        Auto-stand at 0 seconds
-                      </div>
-                    </div>
-                  </div>
-                )}
+
 
                 {busy && (
                   <div className="text-yellow-300 text-sm animate-pulse">

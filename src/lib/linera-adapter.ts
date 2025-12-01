@@ -19,6 +19,7 @@ export class LineraAdapter {
   private static instance: LineraAdapter | null = null;
   private provider: LineraProvider | null = null;
   private application: Application | null = null;
+  private appId: string | null = null;
   private wasmInitPromise: Promise<unknown> | null = null;
   private connectPromise: Promise<LineraProvider> | null = null;
 
@@ -66,10 +67,22 @@ export class LineraAdapter {
         // Reverting to 2 arguments as the previous code worked with 2.
         // Casting to any to bypass conflicting lint errors (some say 2, some say 3).
         const chainId = await faucet.claimChain(wallet, address);
+        console.log("✅ Chain claimed:", chainId);
+
+        // Wait for chain creation to propagate
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         const signer = await new DynamicSigner(dynamicWallet);
         const client = await new Client(wallet, signer);
         console.log("✅ Linera wallet created successfully!");
+
+        // Debug logging
+        try {
+          console.log("🔍 Client keys:", Object.keys(client));
+          console.log("🔍 Client prototype:", Object.getPrototypeOf(client));
+        } catch (e) {
+          console.warn("Could not inspect client:", e);
+        }
 
         this.provider = {
           client,
@@ -107,7 +120,17 @@ export class LineraAdapter {
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");
+
+    // Debug logging
+    try {
+      console.log("🔍 Application keys:", Object.keys(application));
+      console.log("🔍 Application prototype:", Object.getPrototypeOf(application));
+    } catch (e) {
+      console.warn("Could not inspect application:", e);
+    }
+
     this.application = application;
+    this.appId = appId;
     this.notifyListeners();
   }
 
@@ -125,6 +148,23 @@ export class LineraAdapter {
 
     console.log("✅ Linera application queried successfully!");
     return response.data as T;
+  }
+
+  async mutate(mutation: string): Promise<any> {
+    if (!this.application) throw new Error("Application not set");
+
+    console.log("🚀 Sending mutation:", mutation);
+    // In Linera, mutations are sent via the query method but with a mutation string
+    const result = await this.application.query(JSON.stringify({ query: mutation }));
+    const response = JSON.parse(result);
+
+    if (response.errors) {
+      console.error("GraphQL Errors:", response.errors);
+      throw new Error(response.errors[0].message);
+    }
+
+    console.log("✅ Mutation executed successfully!", response.data);
+    return response.data;
   }
 
   getProvider(): LineraProvider {
@@ -145,6 +185,11 @@ export class LineraAdapter {
   getApplication(): Application {
     if (!this.application) throw new Error("Application not set");
     return this.application;
+  }
+
+  get client(): Client {
+    if (!this.provider?.client) throw new Error("Client not set");
+    return this.provider.client;
   }
 
   identity(): string {
@@ -182,11 +227,13 @@ export class LineraAdapter {
 
   resetApplication(): void {
     this.application = null;
+    this.appId = null;
     this.notifyListeners();
   }
 
   reset(): void {
     this.application = null;
+    this.appId = null;
     this.provider = null;
     this.connectPromise = null;
     this.notifyListeners();

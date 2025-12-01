@@ -65,6 +65,11 @@ impl QueryRoot {
         *state.default_buy_in.get()
     }
 
+    async fn deployer(&self) -> Option<Owner> {
+        let state = self.state.lock().await;
+        *state.deployer.get()
+    }
+
     async fn player(&self, owner: Owner) -> Option<PlayerStateObject> {
         let mut state = self.state.lock().await;
         let player_view = state.players.load_entry_mut(&owner).await.ok()?;
@@ -85,7 +90,6 @@ impl QueryRoot {
             player_hand: player_view.player_hand.get().clone(),
             dealer_hand: player_view.dealer_hand.get().clone(),
             allowed_bets: ALLOWED_BETS.to_vec(),
-            round_start_time: *player_view.round_start_time.get(),
             game_history: history,
         })
     }
@@ -100,7 +104,6 @@ struct PlayerStateObject {
     player_hand: Vec<Card>,
     dealer_hand: Vec<Card>,
     allowed_bets: Vec<u64>,
-    round_start_time: u64,
     game_history: Vec<GameRecord>,
 }
 
