@@ -105,14 +105,12 @@ export default function DynamicMethods({ isDarkMode }: DynamicMethodsProps) {
   async function getCount() {
     const result = await lineraAdapter.queryApplication<{
       data: { value: number };
-    }>({ query: "query { value }" });
+    }>("query { value }");
     setCount(result.data.value);
   }
 
   async function incrementCount() {
-    await lineraAdapter.queryApplication({
-      query: "mutation { increment(value: 1) }",
-    });
+    await lineraAdapter.queryApplication("mutation { increment(value: 1) }");
   }
 
   return (
