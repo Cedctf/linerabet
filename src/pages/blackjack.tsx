@@ -277,15 +277,7 @@ export default function Blackjack() {
 
 
 
-  // Helper to format args for GraphQL
-  const formatArgs = (args: object) => {
-    const keys = Object.keys(args);
-    if (keys.length === 0) return "";
-    const formatted = keys
-      .map((key) => `${key}: ${(args as any)[key]}`)
-      .join(", ");
-    return `(${formatted})`;
-  }
+
 
 
   const handleAction = async (action: string, args: object = {}) => {
