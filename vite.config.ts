@@ -15,12 +15,13 @@ export default defineConfig({
       globals: {
         Buffer: true,
         global: false,
-        process: true,
+        process: false,
       },
     }),
   ],
   define: {
     global: 'globalThis',
+    'process.env': {},
   },
 
   resolve: {
