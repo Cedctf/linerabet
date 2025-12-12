@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [
     react(),
     nodePolyfills({
+      protocolImports: true,
       include: ['crypto', 'buffer', 'stream', 'util', 'vm', 'http', 'https'],
       globals: {
         Buffer: true,
