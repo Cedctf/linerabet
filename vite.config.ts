@@ -14,11 +14,15 @@ export default defineConfig({
       include: ['crypto', 'buffer', 'stream', 'util', 'vm', 'http', 'https'],
       globals: {
         Buffer: true,
-        global: true,
+        global: false,
         process: true,
       },
     }),
   ],
+  define: {
+    global: 'globalThis',
+  },
+
   resolve: {
     alias: {
       '@linera/metamask': path.resolve(__dirname, 'metamask/src/index.ts'),
