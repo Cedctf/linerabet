@@ -24,7 +24,15 @@ export default defineConfig({
     global: 'globalThis',
     'process.env': {},
   },
-
+  build: {
+    rollupOptions: {
+      input: {
+        index: 'index.html',
+        linera: '@linera/client',
+      },
+      preserveEntrySignatures: 'strict',
+    },
+  },
   resolve: {
     alias: {
       '@linera/metamask': path.resolve(__dirname, 'metamask/src/index.ts'),
