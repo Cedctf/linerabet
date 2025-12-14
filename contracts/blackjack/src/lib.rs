@@ -1,4 +1,4 @@
-use async_graphql::{Request, Response};
+use async_graphql::{Enum, InputObject, Request, Response};
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
     linera_base_types::{ContractAbi, ServiceAbi},
@@ -38,4 +38,24 @@ pub enum Operation {
     Stand,
     /// Request chips to reset balance to 100 (Testnet Faucet).
     RequestChips,
+    /// Spin the roulette wheel with a list of bets.
+    SpinRoulette { bets: Vec<RouletteBet> },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, InputObject)]
+pub struct RouletteBet {
+    pub bet_type: RouletteBetType,
+    pub number: Option<u8>,
+    pub amount: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
+pub enum RouletteBetType {
+    Number,
+    Red,
+    Black,
+    Even,
+    Odd,
+    Low,  // 1-18
+    High, // 19-36
 }

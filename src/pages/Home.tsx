@@ -1,28 +1,27 @@
 import { Link } from 'react-router-dom';
 import CardSwap, { Card } from '../components/CardSwap';
 import CountUp from '../components/CountUp';
-import Header from '../components/Header';
 
 export default function Home() {
   const games = [
-    { 
-      name: 'Blackjack', 
-      image: '/games/blackjack.jpg', 
+    {
+      name: 'Blackjack',
+      image: '/games/blackjack.jpg',
       description: 'Beat the dealer with classic 21'
     },
-    { 
-      name: 'Poker', 
-      image: '/games/poker.jpg', 
+    {
+      name: 'Poker',
+      image: '/games/poker.jpg',
       description: 'Texas Hold\'em tournaments'
     },
-    { 
-      name: 'Baccarat', 
-      image: '/games/baccarat.jpg', 
+    {
+      name: 'Baccarat',
+      image: '/games/baccarat.jpg',
       description: 'High stakes elegance'
     },
-    { 
-      name: 'Roulette', 
-      image: '/games/roulette.jpg', 
+    {
+      name: 'Roulette',
+      image: '/games/roulette.jpg',
       description: 'Spin the wheel of fortune'
     }
   ];
@@ -31,7 +30,7 @@ export default function Home() {
     <div className="h-screen bg-black text-white overflow-hidden relative flex flex-col">
       {/* Animated Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-green-950 opacity-80"></div>
-      
+
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 opacity-10" style={{
         backgroundImage: `linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)`,
@@ -43,27 +42,26 @@ export default function Home() {
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl"></div>
 
       <div className="relative z-10">
-        {/* Header */}
-        <Header />
+
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-6 flex-1 flex items-center">
+        <main className="max-w-7xl mx-auto px-6 flex-1 flex items-center pt-20">
           <div className="grid md:grid-cols-2 gap-8 items-center w-full">
             {/* Left Side - Hero Content */}
             <div className="space-y-8 max-md:text-center">
               <div className="inline-block px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-full">
                 <span className="text-green-400 text-sm font-semibold tracking-wide">Web3 Gaming Platform</span>
               </div>
-              
+
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight">
                 Play, Win,{' '}
                 <span className="bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
                   Earn
                 </span>
               </h1>
-              
+
               <p className="text-xl text-gray-400 max-w-lg max-md:mx-auto leading-relaxed">
-                Experience the future of online gaming with provably fair games, instant payouts, 
+                Experience the future of online gaming with provably fair games, instant payouts,
                 and complete transparency on the blockchain.
               </p>
 
@@ -130,7 +128,7 @@ export default function Home() {
                         {/* Gradient Overlay on Image */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent"></div>
                       </div>
-                      
+
                       {/* Game Info */}
                       <div className="absolute bottom-0 w-full p-8 z-10">
                         <h3 className="text-4xl font-bold mb-2 text-white">{game.name}</h3>
