@@ -24,6 +24,7 @@
   body {
     padding: 0 20px;
   }
+
   .roulette-wheel {
     float: none;
     left: 30px;
@@ -100,6 +101,7 @@
   background-size: 1000px auto;
   margin: 0 auto;
 }
+
 .roulette-board-grid-numbers {
   display: grid;
   width: auto;
@@ -109,6 +111,7 @@
   margin-top: 27px;
   margin-bottom: 17px;
 }
+
 .roulette-board-grid-other {
   display: grid;
   width: auto;
@@ -137,7 +140,7 @@
 }
 
 .roulette-game-container ul li.board-chip div {
-  position: relative; 
+  position: relative;
   display: block;
   width: 60px;
   height: 60px;
@@ -177,104 +180,137 @@
   box-shadow: 0 0 5px #ffee10;
   text-shadow: 0 0 5px #ffee10;
 }
+
 .roulette-game-container ul li.board-chip div.chip_selected {
   color: #ffee10;
   box-shadow: 0 0 20px #ffee10;
   text-shadow: 0 0 5px #ffee10;
   border: 2px solid #ffee10;
 }
+
 .roulette-game-container ul li.board-chip div.chip-100 {
-  background:url('./assets/chip_black.png') no-repeat;
-  background-size: 60px 60px;
-}
-.roulette-game-container ul li.board-chip div.chip-20 {
-  background:url('./assets/chip_blue.png') no-repeat;
-  background-size: 60px 60px;
-}
-.roulette-game-container ul li.board-chip div.chip-10 {
-  background:url('./assets/chip_orange.png') no-repeat;
-  background-size: 60px 60px;
-}
-.roulette-game-container ul li.board-chip div.chip-5 {
-  background:url('./assets/chip_purple.png') no-repeat;
+  background: url('./assets/chip_black.png') no-repeat;
   background-size: 60px 60px;
 }
 
+.roulette-game-container ul li.board-chip div.chip-20 {
+  background: url('./assets/chip_blue.png') no-repeat;
+  background-size: 60px 60px;
+}
+
+.roulette-game-container ul li.board-chip div.chip-10 {
+  background: url('./assets/chip_orange.png') no-repeat;
+  background-size: 60px 60px;
+}
+
+.roulette-game-container ul li.board-chip div.chip-5 {
+  background: url('./assets/chip_purple.png') no-repeat;
+  background-size: 60px 60px;
+}
+
+/* CSS-only Chips */
 div.chip-100-placed {
-  background:url('./assets/chip_black.png') no-repeat;
-  background-size: 30px 30px;
+  background-color: #1a1a1a;
+  border: 4px dashed #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
 div.chip-20-placed {
-  background:url('./assets/chip_blue.png') no-repeat;
-  background-size: 30px 30px;
+  background-color: #2563eb;
+  border: 4px dashed #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
 div.chip-10-placed {
-  background:url('./assets/chip_orange.png') no-repeat;
-  background-size: 30px 30px;
+  background-color: #f97316;
+  border: 4px dashed #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
 div.chip-5-placed {
-  background:url('./assets/chip_purple.png') no-repeat;
-  background-size: 30px 30px;
+  background-color: #9333ea;
+  border: 4px dashed #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
-.roulette-actions{
+
+.roulette-actions {
   display: block;
   position: relative;
   height: 150px;
 }
+
 .chipValue {
   position: relative;
 }
-.chipValueImage { 
+
+.chipValueImage {
   position: absolute;
-  width:30px;
-  height:30px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 1px 1px 2px black;
 }
+
 .chipSum {
-  position:absolute;
+  position: absolute;
   font-weight: 900;
-  font-size:20px;
+  font-size: 20px;
   -webkit-text-stroke: 1px blue;
   -webkit-text-fill-color: white;
-  z-index:10;
+  z-index: 10;
 }
-.progressBar { 
-  width:400px;
+
+.progressBar {
+  width: 400px;
   margin: 0 auto;
 }
-.linearProgressRounds { 
-  width:400px;
-  height:40px;
+
+.linearProgressRounds {
+  width: 400px;
+  height: 40px;
 }
+
 .progressRoundTitle {
-  text-align:center;
-  margin:0 auto;
-  margin-top:20px;
+  text-align: center;
+  margin: 0 auto;
+  margin-top: 20px;
   font-size: 24px;
-    font-weight: 900;
-    color: #fff;
+  font-weight: 900;
+  color: #fff;
 }
-.winnerItem { 
+
+.winnerItem {
   font-size: 24px;
   font-weight: 600;
-  margin-top:20px;
+  margin-top: 20px;
   color: #f5f5dc;
 }
-.winnerItemHeader { 
+
+.winnerItemHeader {
   text-align: center;
   font-size: 24px;
   font-weight: 600;
-  margin-top:20px;
+  margin-top: 20px;
   color: #f5f5dc;
 }
+
 .rouletteWheelWrapper {
   margin: 0 auto;
 }
-.winnerHistory { 
-  vertical-align:top;
+
+.winnerHistory {
+  vertical-align: top;
   width: 400px;
 }
-.winnersBoard { 
-  vertical-align:top;
+
+.winnersBoard {
+  vertical-align: top;
   width: 400px;
 }
 
@@ -282,21 +318,25 @@ div.chip-5-placed {
   text-align: center;
   background-color: rgb(177, 6, 6);
 }
+
 .winnerHistory .green {
   text-align: center;
   background-color: rgb(42, 174, 42);
 }
+
 .winnerHistory .black {
   text-align: center;
   background-color: rgb(41, 40, 40);
 }
+
 .winnerHistory div {
-  float:left; 
-  color:#fff;
+  float: left;
+  color: #fff;
   font-weight: 900;
-  line-height: 40px;;
-  margin-left:20px;
-  margin-top:10px;
+  line-height: 40px;
+  ;
+  margin-left: 20px;
+  margin-top: 10px;
   width: 40px;
   height: 40px;
   margin-bottom: 10px;

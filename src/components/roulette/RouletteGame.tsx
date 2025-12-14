@@ -134,88 +134,159 @@ const RouletteGame = () => {
         }
     };
 
-    const getChipClasses = (val: number) => classNames("w-16 h-16 rounded-full flex items-center justify-center font-bold text-white cursor-pointer transition-transform hover:scale-110 border-2", {
-        "bg-red-500 border-red-300": val === 5,
-        "bg-blue-500 border-blue-300": val === 10,
-        "bg-green-500 border-green-300": val === 20,
-        "bg-black border-gray-500": val === 100,
-        "ring-4 ring-yellow-400": selectedChip === val
-    });
+    const [showHistory, setShowHistory] = useState(false);
+
+    const getChipClasses = (val: number) => {
+        const selected = selectedChip === val;
+        // Base classes for 3D/Gradient chip look
+        const base = "relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg cursor-pointer";
+
+        // Color variants with gradients
+        let colorClass = "";
+        switch (val) {
+            case 5: colorClass = "border-white bg-gradient-to-br from-red-500 to-red-700"; break;
+            case 10: colorClass = "border-white bg-gradient-to-br from-blue-500 to-blue-700"; break;
+            case 20: colorClass = "border-white bg-gradient-to-br from-green-500 to-green-700"; break;
+            case 100: colorClass = "border-white bg-gradient-to-br from-gray-800 to-black"; break;
+            default: colorClass = "border-white bg-gray-500";
+        }
+
+        if (selected) {
+            // Selected state overrides border and scale
+            return classNames(base, "scale-110 border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 shadow-[0_0_15px_#facc15]");
+        }
+
+        return classNames(base, colorClass, "hover:scale-105");
+    };
 
     return (
-        <div className="bg-green-900 min-h-screen text-white font-sans p-8 flex flex-col items-center">
-            <h1 className="text-4xl font-bold mb-4 drop-shadow-md text-amber-400">Roulette</h1>
+        <div className="min-h-screen bg-black text-white overflow-hidden relative font-sans">
+            {/* Background / styling matching Blackjack */}
+            <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-900 to-green-950 opacity-90" />
+            <div
+                className="absolute inset-0 opacity-10"
+                style={{
+                    backgroundImage:
+                        "linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)",
+                    backgroundSize: "50px 50px",
+                }}
+            />
+            <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
+            <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
 
-            <div className="flex gap-8 mb-8">
-                {/* Left Panel: Winners & Wheel */}
-                <div className="flex flex-col gap-4">
-                    {/* History Panel */}
-                    <div className="bg-black/50 p-4 rounded-lg w-full max-w-sm">
-                        <h3 className="text-amber-200 font-bold mb-2 text-center">History</h3>
-                        <div className="flex gap-2 flex-wrap justify-center">
-                            {history.map((num, i) => (
-                                <div key={i} className={`w-8 h-8 flex items-center justify-center rounded-full font-bold ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-800' : 'bg-red-600'}`}>
-                                    {num}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+            {/* Main Content */}
+            <div className="relative z-10 flex flex-col items-center justify-start min-h-screen py-8 px-4 pt-28 overflow-y-auto">
 
-                    <Wheel rouletteData={rouletteData} number={winningNumber} />
-
-                    {lastWinAmount > 0 && (
-                        <div className="bg-yellow-500/80 p-4 rounded-lg text-black text-center font-bold text-2xl animate-bounce">
-                            YOU WON ${lastWinAmount}!
-                        </div>
-                    )}
+                {/* Header */}
+                <div className="relative w-full max-w-6xl mb-8 flex justify-center items-center">
+                    <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
+                        Roulette
+                    </h1>
+                    <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center gap-2"
+                    >
+                        📜 History
+                    </button>
                 </div>
 
-                {/* Right Panel: Board */}
-                <div className="flex flex-col items-center gap-4">
-                    <div className="bg-black/30 p-2 rounded-full px-8 text-2xl font-bold border border-white/20">
-                        Balance: <span className="text-green-400">${balance}</span>
+                <div className="flex flex-col xl:flex-row gap-8 items-start justify-center w-full max-w-7xl">
+
+                    {/* Left Column: Wheel & Info */}
+                    <div className="flex flex-col items-center gap-6">
+                        <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm">
+                            <Wheel rouletteData={rouletteData} number={winningNumber} />
+                        </div>
+
+                        {/* Status/Win Message */}
+                        <div className="h-16 flex items-center justify-center">
+                            {lastWinAmount > 0 && (
+                                <div className="px-8 py-3 bg-yellow-500/90 rounded-xl text-black font-extrabold text-2xl animate-bounce shadow-[0_0_20px_#eab308]">
+                                    YOU WON ${lastWinAmount}!
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="transform scale-90 origin-top">
-                        <Board
-                            onCellClick={onCellClick}
-                            chipsData={{ selectedChip, placedChips }}
-                            rouletteData={rouletteData}
-                        />
-                    </div>
+                    {/* Right Column: Board & Controls */}
+                    <div className="flex flex-col items-center gap-6 flex-1">
 
-                    {/* Controls */}
-                    <div className="bg-black/40 p-6 rounded-xl border border-white/10 w-full flex flex-col items-center gap-6">
-                        <div className="flex gap-4">
-                            {[5, 10, 20, 100].map(val => (
-                                <div
-                                    key={val}
-                                    className={`${getChipClasses(val)} text-xl`}
-                                    onClick={() => setSelectedChip(val)}
+                        {/* Top Control Panel: Chips & Actions */}
+                        <div className="flex flex-col items-center gap-6 bg-black/40 p-6 rounded-xl border border-white/10 w-full max-w-3xl backdrop-blur-sm shadow-md">
+
+                            <div className="flex flex-col items-center gap-2">
+                                <h3 className="text-green-200 font-semibold uppercase tracking-wider text-sm">Select Chip Value</h3>
+                                <div className="flex gap-4 flex-wrap justify-center p-2">
+                                    {[5, 10, 20, 100].map(val => (
+                                        <div
+                                            key={val}
+                                            className={getChipClasses(val)}
+                                            onClick={() => setSelectedChip(val)}
+                                        >
+                                            {val}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-4 w-full justify-center">
+                                <button
+                                    onClick={clearBet}
+                                    disabled={stage !== GameStages.PLACE_BET || placedChips.size === 0}
+                                    className="px-8 py-3 bg-red-600/90 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all border-b-4 border-red-800 active:border-b-0 active:translate-y-1"
                                 >
-                                    {val}
-                                </div>
-                            ))}
+                                    Clear Bets
+                                </button>
+                                <button
+                                    onClick={spin}
+                                    disabled={stage !== GameStages.PLACE_BET}
+                                    className="px-16 py-3 bg-gradient-to-r from-amber-400 to-yellow-600 hover:from-amber-300 hover:to-yellow-500 text-black font-extrabold text-2xl rounded-xl shadow-[0_0_20px_#ca8a04] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed transform hover:scale-105 transition-all border-b-4 border-amber-700 active:border-b-0 active:translate-y-1"
+                                >
+                                    {stage === GameStages.PLACE_BET ? "SPIN" : "SPINNING..."}
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="flex gap-4">
-                            <button
-                                onClick={clearBet}
-                                disabled={stage !== GameStages.PLACE_BET}
-                                className="px-8 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full font-bold text-lg shadow-lg"
-                            >
-                                Clear Bets
-                            </button>
-                            <button
-                                onClick={spin}
-                                disabled={stage !== GameStages.PLACE_BET}
-                                className="px-12 py-3 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-full font-bold text-xl text-black shadow-lg transform active:scale-95 transition-all"
-                            >
-                                SPIN
-                            </button>
+                        {/* Game Board (Now at bottom) */}
+                        <div className="transform origin-top scale-[0.6] md:scale-[0.75] lg:scale-[0.85] p-4 bg-black/20 rounded-xl border border-white/5">
+                            <Board
+                                onCellClick={onCellClick}
+                                chipsData={{ selectedChip, placedChips }}
+                                rouletteData={rouletteData}
+                            />
                         </div>
                     </div>
                 </div>
+
+                {/* History Modal */}
+                {showHistory && (
+                    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-2 border-green-600 p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                            <div className="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
+                                <h2 className="text-3xl font-bold text-green-400">Winning Numbers</h2>
+                                <button
+                                    onClick={() => setShowHistory(false)}
+                                    className="text-gray-400 hover:text-white transition-colors"
+                                >
+                                    <span className="text-2xl">✕</span>
+                                </button>
+                            </div>
+
+                            {history.length === 0 ? (
+                                <p className="text-green-300/50 text-center py-12 text-xl">No spins yet.</p>
+                            ) : (
+                                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-4">
+                                    {history.map((num, i) => (
+                                        <div key={i} className={`w-12 h-12 flex items-center justify-center rounded-full font-bold text-lg shadow-md border-2 border-white/20 ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                                            {num}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
