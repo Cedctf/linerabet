@@ -22,7 +22,7 @@ export default function ConnectWallet() {
         try {
             const chainId = lineraAdapter.getProvider().chainId;
 
-            // 1. Transfer 1 token to deployer
+            // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
             await lineraAdapter.client.transfer({
                 recipient: {
                     chain_id: chainId,
@@ -119,7 +119,7 @@ export default function ConnectWallet() {
                 <ConfirmationModal
                     isOpen={isBuyModalOpen}
                     title="Confirm Chip Purchase"
-                    message={`Do you want to use 1 Linera Test Token to purchase 100 Chips?
+                    message={`Do you want to use 1 Linera Test Token to purchase 100 Chips? (Minimum transfer: 1 Token)
 
 Current Balance:
 • ${lineraData.balance} Test Tokens

@@ -9,9 +9,9 @@ use linera_sdk::{
     Contract, ContractRuntime,
 };
 
-use contracts::{BlackjackInit, Operation};
+use contracts::{BlackjackInit, Operation, RouletteBet, RouletteBetType};
 
-use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, ALLOWED_BETS};
+use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, RouletteRecord, ALLOWED_BETS};
 
 const SUITS: [&str; 4] = ["clubs", "diamonds", "hearts", "spades"];
 const VALUES: [&str; 13] = [
@@ -111,6 +111,11 @@ impl Contract for ContractsContract {
                      player.phase.set(GamePhase::WaitingForBet);
                 }
             }
+            Operation::SpinRoulette { bets } => {
+                if let Err(e) = Self::spin_roulette(player, &mut self.runtime, bets) {
+                    panic!("{}", e);
+                }
+            }
         }
         Self::Response::default()
     }
@@ -123,7 +128,80 @@ impl Contract for ContractsContract {
     }
 }
 
+const BLACK_NUMBERS: [u8; 18] = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+
 impl ContractsContract {
+    fn spin_roulette(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, bets: Vec<RouletteBet>) -> Result<(), String> {
+        let mut total_bet: u64 = 0;
+        for bet in &bets {
+            total_bet = total_bet.saturating_add(bet.amount);
+            if bet.bet_type == RouletteBetType::Number {
+                ensure!(bet.number.is_some(), "Number bet must specify a number");
+                let n = bet.number.unwrap();
+                ensure!(n <= 36, "Invalid number bet");
+            }
+        }
+        ensure!(total_bet > 0, "Total bet must be positive");
+        let balance = *player.player_balance.get();
+        ensure!(balance >= total_bet, "Insufficient balance");
+
+        // Deduct
+        player.player_balance.set(balance - total_bet);
+
+        // Spin
+        let mut rng = SimpleRng::new(Self::bump_seed(player));
+        let winning_number = (rng.next() % 37) as u8;
+
+        // Calculate payout
+        let mut total_payout: u64 = 0;
+        let is_black = BLACK_NUMBERS.contains(&winning_number);
+
+        for bet in &bets {
+            let win = match bet.bet_type {
+                RouletteBetType::Number => {
+                    if let Some(n) = bet.number {
+                        n == winning_number
+                    } else {
+                        false
+                    }
+                },
+                RouletteBetType::Red => winning_number != 0 && !is_black,
+                RouletteBetType::Black => is_black,
+                RouletteBetType::Even => winning_number != 0 && winning_number % 2 == 0,
+                RouletteBetType::Odd => winning_number != 0 && winning_number % 2 != 0,
+                RouletteBetType::Low => winning_number >= 1 && winning_number <= 18,
+                RouletteBetType::High => winning_number >= 19 && winning_number <= 36,
+            };
+            
+            if win {
+                let multiplier = match bet.bet_type {
+                    RouletteBetType::Number => 36, // 35:1 + 1 (return stake)
+                    RouletteBetType::Red | RouletteBetType::Black | RouletteBetType::Even | 
+                    RouletteBetType::Odd | RouletteBetType::Low | RouletteBetType::High => 2,
+                };
+                total_payout = total_payout.saturating_add(bet.amount.saturating_mul(multiplier));
+            }
+        }
+
+        // Update balance
+        let new_balance = *player.player_balance.get();
+        player.player_balance.set(new_balance.saturating_add(total_payout));
+        player.last_roulette_outcome.set(Some(winning_number));
+
+        // History
+        let now_timestamp = runtime.system_time();
+        let now_micros = now_timestamp.micros();
+        
+        player.roulette_history.push(RouletteRecord {
+            winning_number,
+            total_bet,
+            payout: total_payout,
+            timestamp: now_micros,
+        });
+
+        Ok(())
+    }
+
     // Reset game to WaitingForBet
     fn reset(player: &mut PlayerStateView) -> Result<(), String> {
         let phase = *player.phase.get();
