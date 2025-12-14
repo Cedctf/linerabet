@@ -12,9 +12,11 @@
 4.  [CLI Reference](#cli-reference-common-tasks)
 5.  [Example 1: The Counter (Basic Smart Contract)](#example-1-the-counter-basic-smart-contract)
 6.  [Example 2: Blackjack (Full DApp with Frontend)](#example-2-blackjack-full-dapp-with-frontend)
-7.  [Dynamic Wallet Integration](#dynamic-wallet-integration)
-8.  [Deployment & Workflow](#deployment--workflow)
-9.  [Troubleshooting & FAQ](#troubleshooting--faq)
+7.  [Example 3: Roulette (Integrated Casino Suite)](#example-3-roulette-integrated-casino-suite)
+8.  [Dynamic Wallet Integration](#dynamic-wallet-integration)
+9.  [Deployment & Workflow](#deployment--workflow)
+10. [Troubleshooting & FAQ](#troubleshooting--faq)
+11. [Game Mechanics & Code Deep Dive](#game-mechanics--code-deep-dive)
 
 ---
 
@@ -263,6 +265,51 @@ async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Respo
 
 ---
 
+## Example 3: Roulette (Integrated Casino Suite)
+
+The Roulette game builds upon the Blackjack foundation, modifying the `contracts/blackjack` service to support multiple game types within the same application state.
+
+### 1. Unified Contract Structure (`contracts/blackjack`)
+
+We expanded the existing contract to include Roulette operations. This allows a user to maintain a single "Casino Balance" across both games.
+
+**Updated Operations (`src/lib.rs`):**
+```rust
+pub enum Operation {
+    // ... Blackjack ops
+    SpinRoulette { bets: Vec<RouletteBet> },
+}
+
+#[derive(InputObject)]
+pub struct RouletteBet {
+    pub bet_type: RouletteBetType,
+    pub number: Option<u8>,
+    pub amount: u64,
+}
+
+#[derive(Enum)]
+pub enum RouletteBetType {
+    Number, Red, Black, Even, Odd, Low, High
+}
+```
+
+### 2. Frontend Implementation (`src/pages/roulette.tsx`)
+
+The Roulette frontend is a self-contained page that shares utilities with the Blackjack implementation where possible but has its own dedicated logic.
+
+*   **Logic Location**: `src/pages/roulette.tsx` (Contains all game state, animations, and interaction logic).
+*   **Utilities**: `src/lib/roulette-utils.ts` (Contains wheel constants, payout math, and shared types).
+    *   *Note*: We moved `roulette-chain.ts` into `roulette-utils.ts` to consolidate all helper logic in one place.
+
+**Key Interaction Flow:**
+1.  **Place Chips**: User clicks the board, updating local React state (`placedChips` Map).
+2.  **Spin**:
+    *   Frontend constructs a `SpinRoulette` mutation.
+    *   **Crucial Step**: Enumerations (like `Red`, `Black`) must be sent as UPPERCASE strings (e.g., `RED`, `BLACK`) to match the GraphQL schema, even if they are PascalCase in Rust.
+3.  **Result**: The contract returns the winning number within the `lastRouletteOutcome` state, which the frontend queries to determine the animation stop point.
+
+---
+
 ## Dynamic Wallet Integration
 
 LineraBet uses a custom adapter to bridge Ethereum wallets (via Dynamic) to the Linera network.
@@ -328,7 +375,7 @@ linera publish-and-create \
 ### 3. Connect Frontend
 
 1.  Copy the **Application ID** from the deployment output.
-2.  Update `BLACKJACK_APP_ID` in `src/pages/blackjack.tsx`.
+2.  Update `CONTRACTS_APP_ID` in `src/constants.ts` (or `BLACKJACK_APP_ID` in legacy files).
 3.  Reload the frontend.
 
 ---
@@ -351,19 +398,23 @@ linera publish-and-create \
 *   **Cause**: Using `Owner` type directly in GraphQL queries where `AccountOwner` is expected by the generated schema.
 *   **Fix**: Check the schema (GraphiQL) and use the correct type (usually `AccountOwner` for Linera 0.12+).
 
----
+### "Invalid value for argument... enumeration type... does not contain the value 'Number'"
+*   **Cause**: GraphQL Enums are case-sensitive and typically UPPER_SNAKE_CASE.
+*   **Fix**: Send `NUMBER`, `RED`, `BLACK` (all caps) from the frontend, even if the Rust enum is `Number`, `Red`, `Black`.
 
-*Happy shipping on Linera!*
+### "Module ... does not provide export 'Item'"
+*   **Cause**: Importing a TypeScript `interface` or `type` as a runtime value.
+*   **Fix**: Use `import type { Item } from ...` so the bundler knows it's a type-only import and removes it during compilation.
 
 ---
 
 ## Game Mechanics & Code Deep Dive
 
-This section details exactly how the Blackjack frontend talks to the Linera blockchain, from the initial connection to every game action.
+This section details exactly how the frontend talks to the Linera blockchain.
 
-### 1. Connection & Setup
+### 1. Connection & Setup (Browser Environment)
 
-Before any game actions can occur, the frontend must establish a connection to the Linera network and identify the specific Blackjack application.
+When running in the browser, we cannot access the filesystem `wallet.db`. Instead, `linera-client` uses `IndexedDB` or in-memory storage.
 
 #### A. The Adapter (`src/lib/linera-adapter.ts`)
 We use a singleton `LineraAdapter` to manage the connection. It wraps the standard `@linera/client` and integrates with the Dynamic wallet.
@@ -373,17 +424,21 @@ We use a singleton `LineraAdapter` to manage the connection. It wraps the standa
 // src/lib/linera-adapter.ts
 async connect(dynamicWallet: DynamicWallet, rpcUrl: string): Promise<LineraProvider> {
     // 1. Initialize WASM
+    // This loads the compiled Rust code that powers the Linera client in the browser
     await initLinera();
 
     // 2. Connect to Faucet (Testnet)
     const faucet = await new Faucet(rpcUrl);
+    
+    // 3. Create/Load Wallet
+    // The faucet creates a wallet for us. In the browser, this lives in memory/IndexedDB.
     const wallet = await faucet.createWallet();
 
-    // 3. Claim a Chain for the User
+    // 4. Claim a Chain for the User
     // This gives the user their own microchain ID on the testnet
     const chainId = await faucet.claimChain(wallet, dynamicWallet.address);
 
-    // 4. Create the Client with our Custom Signer
+    // 5. Create the Client with our Custom Signer
     const signer = await new DynamicSigner(dynamicWallet);
     const client = await new Client(wallet, signer);
 
@@ -507,8 +562,6 @@ Operation::RequestChips => {
 }
 ```
 
----
-
 ### 4. Game Flow: Placing a Bet
 
 Starting a game involves committing chips and dealing the initial cards.
@@ -552,8 +605,6 @@ fn start_game(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>,
 }
 ```
 
----
-
 ### 5. Game Flow: Hitting
 
 The player requests another card.
@@ -590,8 +641,6 @@ fn hit(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Res
     Ok(())
 }
 ```
-
----
 
 ### 6. Game Flow: Standing
 
@@ -630,3 +679,31 @@ fn stand(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> R
 }
 ```
 
+### 7. Roulette Flow (New!)
+
+Roulette follows a similar pattern but sends a complex object (Array of Bets) as an argument.
+
+**Frontend Code (`src/pages/roulette.tsx`):**
+```typescript
+const spin = async () => {
+    // 1. Construct Bet Object
+    // Note: betType must be UPPERCASE string equivalent of Rust enum
+    const betsArg = placedChips.map(c => ({ 
+        betType: "RED", // or "NUMBER", "BLACK", etc.
+        amount: c.amount 
+    }));
+
+    // 2. Mutate
+    // We construct the mutation string manually to handle Enum formatting correctness
+    const mutation = `mutation { spinRoulette(bets: [${betsString}]) }`;
+    await lineraAdapter.mutate(mutation);
+    
+    // 3. Query Result
+    // Unlike a simple return, we query the state after mutation to get the result
+    const data = await lineraAdapter.queryApplication(lastOutcomeQuery);
+    const winningNumber = data.player.lastRouletteOutcome;
+    
+    // 4. Animate
+    // Wheel spins to 'winningNumber'
+}
+```
