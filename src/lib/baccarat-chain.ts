@@ -19,56 +19,74 @@ export async function gql<T = any>(body: GqlPayload): Promise<T> {
 
 export type BaccaratWinner = "Player" | "Banker" | "Tie";
 
-export async function fetchBaccaratState() {
+export async function fetchBaccaratState(owner: string) {
   return gql<{
-    balance: number;
-    currentBet: number;
-    playerHand: { id: string; suit: string; value: string; point_value?: number }[];
-    bankerHand: { id: string; suit: string; value: string; point_value?: number }[];
-    lastResult: null | {
-      playerValue: number;
-      bankerValue: number;
-      winner: BaccaratWinner;
-      isNatural: boolean;
-      playerThirdCardValue?: number | null;
-      bankerDrewThirdCard: boolean;
-      pushed: boolean;
-      netProfit: number;
-    };
+    player: {
+      playerBalance: number;
+      baccarat: {
+        currentBet: number;
+        playerHand: { id: string; suit: string; value: string; point_value?: number }[];
+        bankerHand: { id: string; suit: string; value: string; point_value?: number }[];
+        lastResult: null | {
+          playerValue: number;
+          bankerValue: number;
+          winner: BaccaratWinner;
+          isNatural: boolean;
+          playerThirdCardValue?: number | null;
+          bankerDrewThirdCard: boolean;
+          pushed: boolean;
+          netProfit: number;
+        };
+        gameHistory: any[];
+      };
+    } | null;
   }>({
-    query: `query {
-      balance
-      currentBet
-      playerHand { id suit value }
-      bankerHand { id suit value }
-      lastResult {
-        playerValue
-        bankerValue
-        winner
-        isNatural
-        playerThirdCardValue
-        bankerDrewThirdCard
-        pushed
-        netProfit
+    query: `query GetState($owner: AccountOwner!) {
+      player(owner: $owner) {
+        playerBalance
+        baccarat {
+          currentBet
+          playerHand { id suit value }
+          bankerHand { id suit value }
+          lastResult {
+            playerValue
+            bankerValue
+            winner
+            isNatural
+            playerThirdCardValue
+            bankerDrewThirdCard
+            pushed
+            netProfit
+          }
+           gameHistory {
+             result {
+                 playerValue
+                 bankerValue
+                 winner
+             }
+             bet
+             betType
+             timestamp
+           }
+        }
       }
     }`,
+    variables: { owner },
   });
 }
 
-export function placeBetAndDeal(bet: number, betType: "Player" | "Banker" | "Tie") {
+export async function placeBetAndDeal(bet: number, betType: "Player" | "Banker" | "Tie") {
   // async-graphql maps enum variant fields to camelCase; our args are bet and betType
   const enumLiteral = betType === "Player" ? "PLAYER" : betType === "Banker" ? "BANKER" : "TIE";
-  return gql({
-    query: `mutation {
-      placeBetAndDeal(bet: ${bet}, betType: ${enumLiteral})
-    }`,
-  });
+  const mutation = `mutation {
+    baccaratPlaceBetAndDeal(bet: ${bet}, betType: ${enumLiteral})
+  }`;
+  return lineraAdapter.mutate(mutation);
 }
 
-export function resetBaccaratRound() {
-  return gql({
-    query: `mutation { resetRound }`,
-  });
+export async function resetBaccaratRound() {
+  const mutation = `mutation { baccaratResetRound }`;
+  return lineraAdapter.mutate(mutation);
 }
 
 

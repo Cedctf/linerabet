@@ -109,19 +109,30 @@ export default function BaccaratPage() {
   const insufficientFunds = bet > balance;
   const invalidBet = bet <= 0;
 
-  // Sync initial on-chain state on mount
+  // Sync initial on-chain state on mount and subscribe to connection changes
   useEffect(() => {
-    (async () => {
+    const handleConnectionChange = async () => {
       try {
         if (!lineraAdapter.isApplicationSet()) {
           await lineraAdapter.setApplication(CONTRACTS_APP_ID);
         }
-        const s = await fetchBaccaratState();
-        setBalance(s.balance);
+        if (lineraAdapter.isChainConnected()) {
+          const owner = lineraAdapter.identity();
+          const s = await fetchBaccaratState(owner);
+          if (s?.player) {
+            setBalance(s.player.playerBalance);
+            // potentially restore state from s.player.baccarat if we wanted to
+          }
+          setError(null);
+        }
       } catch (e: any) {
         setError(e?.message ?? "Failed to load on-chain state");
       }
-    })();
+    };
+
+    handleConnectionChange();
+    const unsubscribe = lineraAdapter.subscribe(handleConnectionChange);
+    return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -139,15 +150,24 @@ export default function BaccaratPage() {
     try {
       // call chain mutation
       await placeBetAndDeal(bet, betType === "PLAYER" ? "Player" : betType === "BANKER" ? "Banker" : "Tie");
+
       // fetch new state
-      const s = await fetchBaccaratState();
-      setBalance(s.balance);
+      const owner = lineraAdapter.identity();
+      const s = await fetchBaccaratState(owner);
+
+      if (!s?.player) {
+        throw new Error("Failed to fetch player state");
+      }
+
+      setBalance(s.player.playerBalance);
+
       // build a local round-like object for UI rendering from chain state
-      const last = s.lastResult;
+      const baccaratState = s.player.baccarat;
+      const last = baccaratState.lastResult;
       const winnerUpper = last ? String(last.winner).toUpperCase() : "TIE";
       const result: BaccaratBetResult = {
-        playerHand: normalizeBaccaratCards(s.playerHand as any) as any,
-        bankerHand: normalizeBaccaratCards(s.bankerHand as any) as any,
+        playerHand: normalizeBaccaratCards(baccaratState.playerHand as any) as any,
+        bankerHand: normalizeBaccaratCards(baccaratState.bankerHand as any) as any,
         playerValue: last ? last.playerValue : 0,
         bankerValue: last ? last.bankerValue : 0,
         winner: winnerUpper === "PLAYER" ? "PLAYER" : winnerUpper === "BANKER" ? "BANKER" : "TIE",
@@ -199,7 +219,7 @@ export default function BaccaratPage() {
             setIsDealing(false);
             setShowResults(true);
             // Chain already applied balance; just sync to chain in case of float rounding
-            setBalance(s.balance);
+            setBalance(s.player!.playerBalance);
           }
           return next;
         });
@@ -219,8 +239,11 @@ export default function BaccaratPage() {
     try {
       setBusy(true);
       await resetBaccaratRound();
-      const s = await fetchBaccaratState();
-      setBalance(s.balance);
+      const owner = lineraAdapter.identity();
+      const s = await fetchBaccaratState(owner);
+      if (s?.player) {
+        setBalance(s.player.playerBalance);
+      }
     } finally {
       setBusy(false);
     }
@@ -266,10 +289,6 @@ export default function BaccaratPage() {
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
               Place Your Bet
             </h1>
-            <p className="text-green-200 text-sm">
-              Balance: <span className="font-semibold text-green-400">${formatNumber(balance)}</span>{" "}
-              • Current bet: <span className="font-semibold text-green-400">${formatNumber(bet)}</span>
-            </p>
           </div>
 
           <div className="flex flex-col gap-3 w-full max-w-4xl bg-green-900/40 border border-green-700/40 rounded-lg p-4">

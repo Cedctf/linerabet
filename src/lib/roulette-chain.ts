@@ -44,73 +44,73 @@ export type GameRecord = {
   timestamp: number;
 };
 
-export async function fetchRouletteState() {
+
+export async function fetchRouletteState(owner: string) {
   return gql<{
-    playerBalance: number;
-    currentBets: Bet[];
-    lastResult: SpinResult | null;
-    gameHistory: GameRecord[];
+    player: {
+      playerBalance: number;
+      roulette: {
+        currentBets: Bet[];
+        lastResult: SpinResult | null;
+        gameHistory: GameRecord[];
+      };
+    } | null;
   }>({
-    query: `query {
-      playerBalance
-      currentBets {
-        betType
-        amount
-        selection
-      }
-      lastResult {
-        winningNumber
-        isRed
-        totalPayout
-        betResults {
-          bet {
+    query: `query GetState($owner: AccountOwner!) {
+      player(owner: $owner) {
+        playerBalance
+        roulette {
+          currentBets {
             betType
             amount
             selection
           }
-          won
-          payout
-        }
-      }
-      gameHistory {
-        bets {
-          betType
-          amount
-          selection
-        }
-        spinResult {
-          winningNumber
-          isRed
-          totalPayout
-          betResults {
-            bet {
+          lastResult {
+            winningNumber
+            isRed
+            totalPayout
+            betResults {
+              bet {
+                betType
+                amount
+                selection
+              }
+              won
+              payout
+            }
+          }
+          gameHistory {
+            bets {
               betType
               amount
               selection
             }
-            won
-            payout
+            spinResult {
+              winningNumber
+              isRed
+              totalPayout
+            }
+            timestamp
           }
         }
-        timestamp
       }
     }`,
+    variables: { owner },
   });
 }
 
-export function placeBetsAndSpin(bets: Bet[]) {
+export async function placeBetsAndSpin(bets: Bet[]) {
   const betsInput = bets.map(bet => ({
     betType: convertBetTypeToGraphQL(bet.betType),
     amount: bet.amount,
     selection: bet.selection,
   }));
 
-  return gql({
-    query: `mutation PlaceBetsAndSpin($bets: [BetInput!]!) {
-      placeBetsAndSpin(bets: $bets)
-    }`,
-    variables: { bets: betsInput },
-  });
+  const mutation = `mutation PlaceBetsAndSpin($bets: [RouletteBetInput!]!) {
+    roulettePlaceBetsAndSpin(bets: $bets)
+  }`;
+
+  return lineraAdapter.mutate(mutation, { bets: betsInput });
 }
 
 function convertBetTypeToGraphQL(betType: BetType): string {
@@ -132,8 +132,8 @@ function convertBetTypeToGraphQL(betType: BetType): string {
   }
 }
 
-export function resetRouletteRound() {
-  return gql({
-    query: `mutation { resetRound }`,
-  });
+export async function resetRouletteRound() {
+  const mutation = `mutation { rouletteResetRound }`;
+  return lineraAdapter.mutate(mutation);
 }
+

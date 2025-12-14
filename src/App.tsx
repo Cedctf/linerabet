@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Home, Blackjack, Baccarat, Roulette } from './pages';
+import { Home, Blackjack, Baccarat, Roulette, Games } from './pages';
 import Layout from './components/Layout';
 import "./App.css";
 
@@ -12,6 +12,7 @@ function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
+            <Route path="/games" element={<Games />} />
             <Route path="/blackjack" element={<Blackjack />} />
             <Route path="/baccarat" element={<Baccarat />} />
             <Route path="/roulette" element={<Roulette />} />
