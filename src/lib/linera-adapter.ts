@@ -73,7 +73,7 @@ export class LineraAdapter {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         const signer = await new DynamicSigner(dynamicWallet);
-        const client = await new Client(wallet, signer);
+        const client = await new Client(wallet, signer, false);
         console.log("✅ Linera wallet created successfully!");
 
         // Debug logging
@@ -132,6 +132,10 @@ export class LineraAdapter {
     this.application = application;
     this.appId = appId;
     this.notifyListeners();
+  }
+
+  getAppId(): string | null {
+    return this.appId;
   }
 
   async queryApplication<T>(query: string, variables?: Record<string, any>): Promise<T> {
