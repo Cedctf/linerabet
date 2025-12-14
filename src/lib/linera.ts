@@ -7,7 +7,7 @@ export async function gql<T = any>(body: GqlPayload): Promise<T> {
   // Use the adapter to query the application directly via WASM
   // This avoids needing a separate local service running on port 8080
   try {
-    const result = await lineraAdapter.queryApplication<any>(body);
+    const result = await lineraAdapter.queryApplication<any>(body.query, body.variables);
     if (result.errors?.length) {
       throw new Error(result.errors.map((e: any) => e.message).join("; "));
     }

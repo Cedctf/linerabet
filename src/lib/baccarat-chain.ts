@@ -6,7 +6,7 @@ type GqlPayload = { query: string; variables?: Record<string, unknown> };
 export async function gql<T = any>(body: GqlPayload): Promise<T> {
   // Use the adapter to query the application directly via WASM
   try {
-    const result = await lineraAdapter.queryApplication<any>(body);
+    const result = await lineraAdapter.queryApplication<any>(body.query, body.variables);
     if (result.errors?.length) {
       throw new Error(result.errors.map((e: any) => e.message).join("; "));
     }
