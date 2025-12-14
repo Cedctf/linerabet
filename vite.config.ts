@@ -11,14 +11,28 @@ export default defineConfig({
   plugins: [
     react(),
     nodePolyfills({
+      protocolImports: true,
       include: ['crypto', 'buffer', 'stream', 'util', 'vm', 'http', 'https'],
       globals: {
         Buffer: true,
-        global: true,
-        process: true,
+        global: false,
+        process: false,
       },
     }),
   ],
+  define: {
+    global: 'globalThis',
+    'process.env': {},
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        index: 'index.html',
+        linera: '@linera/client',
+      },
+      preserveEntrySignatures: 'strict',
+    },
+  },
   resolve: {
     alias: {
       '@linera/metamask': path.resolve(__dirname, 'metamask/src/index.ts'),

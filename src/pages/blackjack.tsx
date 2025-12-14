@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import CardComp from "../components/Card";
-import Header from "../components/Header";
 import {
   calculateHandValue,
   type BlackjackCard, // typings only
@@ -8,7 +7,8 @@ import {
 import { lineraAdapter } from "@/lib/linera-adapter";
 
 // New Multi-User Blackjack Application ID
-const BLACKJACK_APP_ID = "8382f4247cf42d835b7702cc642a942ebd7fd801e6baa49e78146ce0cb4422a2";
+import { CONTRACTS_APP_ID } from "../constants";
+
 
 // GraphQL returns UPPER_SNAKE_CASE enums on your network.
 type Phase = "WaitingForBet" | "BettingPhase" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
@@ -33,21 +33,24 @@ interface GameRecord {
   timestamp: number;
 }
 
-interface PlayerState {
-  playerBalance: number;
+interface BlackjackState {
   currentBet: number;
   phase: Phase;
   lastResult: Result | null;
   playerHand: ChainCard[];
   dealerHand: ChainCard[];
-  allowedBets: number[];
   gameHistory: GameRecord[];
+}
+
+interface PlayerState {
+  playerBalance: number;
+  blackjack: BlackjackState;
 }
 
 interface QueryResponse {
   player: PlayerState | null;
   defaultBuyIn: number;
-  deployer: string;
+  deployer: string | null;
 }
 
 /** Convert chain cards ("2","3",...,"10","jack","queen","king","ace") to BlackjackCard (2..10 | faces) */
@@ -97,7 +100,6 @@ export default function Blackjack() {
   const [allowedBets, setAllowedBets] = useState<number[]>([1, 2, 3, 4, 5]);
   const [bet, setBet] = useState<number>(1);
   const [lastBet, setLastBet] = useState<number>(1);
-
   const [phase, setPhase] = useState<Phase>("WaitingForBet");
   const phaseRef = useRef<Phase>("WaitingForBet");
   const [lastResult, setLastResult] = useState<Result>(null);
@@ -105,7 +107,6 @@ export default function Blackjack() {
   const [playerHand, setPlayerHand] = useState<BlackjackCard[]>([]);
   const [dealerHand, setDealerHand] = useState<BlackjackCard[]>([]);
   const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);
-  const [deployerAddress, setDeployerAddress] = useState<string | null>(null);
 
   // UI
   const [busy, setBusy] = useState(false);
@@ -128,21 +129,15 @@ export default function Blackjack() {
   const playerBust = playerValue > 21;
   const dealerBust = dealerValue > 21;
 
+  // ...
+
   const refresh = useCallback(async () => {
     if (!lineraAdapter.isChainConnected()) return;
 
     try {
       // Ensure application is set
       if (!lineraAdapter.isApplicationSet()) {
-        await lineraAdapter.setApplication(BLACKJACK_APP_ID);
-      }
-
-      console.log("Debug: lineraAdapter keys:", Object.keys(lineraAdapter));
-      // console.log("Debug: lineraAdapter prototype:", Object.getPrototypeOf(lineraAdapter));
-
-      if (typeof lineraAdapter.identity !== 'function') {
-        console.error("CRITICAL: lineraAdapter.identity is missing!", lineraAdapter);
-        return;
+        await lineraAdapter.setApplication(CONTRACTS_APP_ID);
       }
 
       const owner = lineraAdapter.identity();
@@ -150,27 +145,28 @@ export default function Blackjack() {
         query GetPlayerState($owner: AccountOwner!) {
           player(owner: $owner) {
             playerBalance
-            currentBet
-            phase
-            lastResult
-            playerHand {
-              suit
-              value
-              id
-            }
-            dealerHand {
-              suit
-              value
-              id
-            }
-            allowedBets
-            gameHistory {
-              playerHand { suit value }
-              dealerHand { suit value }
-              bet
-              result
-              payout
-              timestamp
+            blackjack {
+              currentBet
+              phase
+              lastResult
+              playerHand {
+                suit
+                value
+                id
+              }
+              dealerHand {
+                suit
+                value
+                id
+              }
+              gameHistory {
+                playerHand { suit value }
+                dealerHand { suit value }
+                bet
+                result
+                payout
+                timestamp
+              }
             }
           }
 
@@ -182,55 +178,41 @@ export default function Blackjack() {
       const data = await lineraAdapter.queryApplication<QueryResponse>(query, { owner });
       console.log("State refreshed:", data);
 
-      if (data.deployer) {
-        setDeployerAddress(data.deployer);
-      } else {
-        console.warn("Deployer address not found in state, using hardcoded fallback.");
-        setDeployerAddress("0xef4a68d80af8ae3082ef5549f2fc8a5bb930f3a0f6e69333e0b0af925efe2986");
-      }
-
       if (data.player) {
-        // Check for "new player" state: 0 balance and no history.
-        // The contract initializes balance on the first transaction, so we show defaultBuyIn.
-        const isNewPlayer = data.player.playerBalance === 0 && data.player.gameHistory.length === 0;
+        // Check for "new player" state
+        const bjStats = data.player.blackjack;
+        const isNewPlayer = data.player.playerBalance === 0 && bjStats.gameHistory.length === 0;
         const effectiveBalance = isNewPlayer ? data.defaultBuyIn : data.player.playerBalance;
 
         setBalance(effectiveBalance);
-        setCurrentBet(data.player.currentBet);
-        setAllowedBets(data.player.allowedBets);
-        if (!data.player.allowedBets.includes(bet)) setBet(data.player.allowedBets[0] ?? 1);
+        setCurrentBet(bjStats.currentBet);
+        // allowedBets is typically static or matched to contract constants [1,2,3,4,5]
+        setAllowedBets([1, 2, 3, 4, 5]);
 
-        const chainPhase = normalizePhase(data.player.phase);
+        const chainPhase = normalizePhase(bjStats.phase);
         let effectivePhase = chainPhase;
 
-        // If the chain thinks we are done, but we have locally moved to betting, keep betting.
-        // This allows "Next Round" to be instant without a transaction.
         if (chainPhase === "RoundComplete" && (phaseRef.current === "WaitingForBet" || phaseRef.current === "BettingPhase")) {
           effectivePhase = phaseRef.current;
         } else {
-          // Sync with chain
           effectivePhase = chainPhase;
           phaseRef.current = chainPhase;
         }
 
         setPhase(effectivePhase);
-        setLastResult(data.player.lastResult);
+        setLastResult(bjStats.lastResult);
 
-        // Only update hands if we are not in a local "new game" state that hasn't hit chain yet
-        // (Though usually we want chain state. The only exception is if we cleared hands locally.)
-        // If we are locally WaitingForBet, we expect empty hands.
         if (effectivePhase === "WaitingForBet") {
           setPlayerHand([]);
           setDealerHand([]);
         } else {
-          setPlayerHand(normalizeCards(data.player.playerHand));
-          setDealerHand(normalizeCards(data.player.dealerHand));
+          setPlayerHand(normalizeCards(bjStats.playerHand));
+          setDealerHand(normalizeCards(bjStats.dealerHand));
         }
 
-        setGameHistory(data.player.gameHistory);
+        setGameHistory(bjStats.gameHistory);
       } else {
-        // Fallback if player is null (though likely covered by above due to default view)
-        setBalance(data.defaultBuyIn);
+        // Fallback
         setBalance(data.defaultBuyIn);
         setPhase("WaitingForBet");
         phaseRef.current = "WaitingForBet";
@@ -277,15 +259,7 @@ export default function Blackjack() {
 
 
 
-  // Helper to format args for GraphQL
-  const formatArgs = (args: object) => {
-    const keys = Object.keys(args);
-    if (keys.length === 0) return "";
-    const formatted = keys
-      .map((key) => `${key}: ${(args as any)[key]}`)
-      .join(", ");
-    return `(${formatted})`;
-  }
+
 
 
   const handleAction = async (action: string, args: object = {}) => {
@@ -293,16 +267,17 @@ export default function Blackjack() {
     try {
       let mutation: string;
 
-      // Construct GraphQL mutation
+      // Construct GraphQL mutation matching contracts/src/lib.rs Operation enum
+      // async-graphql defaults to camelCase for variant names.
       if (action === "requestChips") {
         mutation = `mutation { requestChips }`;
       } else if (action === "startGame") {
         const bet = (args as any).bet;
-        mutation = `mutation { startGame(bet: ${bet}) }`;
+        mutation = `mutation { blackjackStartGame(bet: ${bet}) }`;
       } else if (action === "hit") {
-        mutation = `mutation { hit }`;
+        mutation = `mutation { blackjackHit }`;
       } else if (action === "stand") {
-        mutation = `mutation { stand }`;
+        mutation = `mutation { blackjackStand }`;
       } else {
         throw new Error(`Unknown action: ${action}`);
       }
@@ -311,6 +286,8 @@ export default function Blackjack() {
       await refresh();
     } catch (err: any) {
       console.error(`Failed to execute ${action}:`, err);
+      // Alert the user so they know why it failed (e.g. "Game already in progress")
+      alert(`Action failed: ${err.message || JSON.stringify(err)}`);
     } finally {
       setBusy(false);
     }
@@ -342,43 +319,7 @@ export default function Blackjack() {
     await handleAction("stand");
   }
 
-  async function onRequestChips() {
-    if (busy) return;
 
-    if (!deployerAddress) {
-      console.error("Deployer address not found");
-      alert("Cannot buy chips: Contract deployer address unknown.");
-      return;
-    }
-
-    if (!confirm(`Buy 100 chips for 1 Linera Token?\n\nPayment will be sent to: ${deployerAddress.slice(0, 8)}...`)) {
-      return;
-    }
-
-    setBusy(true);
-    try {
-      // 1. Transfer 1 token to deployer
-      const chainId = lineraAdapter.getProvider().chainId;
-      await lineraAdapter.client.transfer({
-        recipient: {
-          chain_id: chainId,
-          owner: deployerAddress,
-        },
-        amount: 1,
-      });
-
-      // 2. Request chips from contract
-      await handleAction("requestChips");
-
-      // 3. Refresh to show new balance
-      await refresh();
-    } catch (err: any) {
-      console.error("Failed to buy chips:", err);
-      alert(`Failed to buy chips: ${err.message || err}`);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function onRepeatBet() {
     setBet(lastBet);
@@ -439,26 +380,15 @@ export default function Blackjack() {
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
 
       <div className="relative z-10">
-        <Header />
 
-        <main className="flex flex-col items-center justify-center gap-3 py-4 px-4 min-h-[calc(100vh-80px)]">
+
+        <main className="flex flex-col items-center justify-center gap-3 py-4 px-4 min-h-[calc(100vh-80px)] pt-24">
           {/* Title / wallet-ish header */}
           <div className="relative w-full max-w-4xl mb-2">
             <div className="text-center">
               <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
                 Blackjack (On-Chain)
               </h1>
-              <p className="text-green-200 text-sm">
-                Balance: <span className="font-semibold text-green-400">{balance}</span>{" "}
-                • Current bet: <span className="font-semibold text-green-400">{currentBet}</span>
-                <button
-                  onClick={onRequestChips}
-                  disabled={busy}
-                  className="ml-4 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full shadow-lg transition-all animate-bounce"
-                >
-                  + Buy Chips (1 Token)
-                </button>
-              </p>
             </div>
 
             {/* History Button */}

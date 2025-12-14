@@ -1,95 +1,137 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
+import { DEPLOYER_ADDRESS } from '../constants';
+import ConfirmationModal from './ConfirmationModal';
+import { useGame } from '../context/GameContext';
 
 export default function ConnectWallet() {
     const { primaryWallet, setShowAuthFlow } = useDynamicContext();
-    const [lineraData, setLineraData] = useState<{ chainId: string; address: string; balance: string } | null>(null);
-    const [isConnecting, setIsConnecting] = useState(false);
+    const { lineraData, isConnecting, refreshData } = useGame();
+    const [isBuying, setIsBuying] = useState(false);
+    const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
-    // Connect to Linera when Dynamic wallet is available
-    useEffect(() => {
-        const connectToLinera = async () => {
-            if (primaryWallet) {
-                if (!lineraAdapter.isChainConnected()) {
-                    try {
-                        setIsConnecting(true);
-                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
-                        const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
+    // Note: Connection logic is now handled in GameContext
 
-                        let balance = "0";
-                        try {
-                            balance = await provider.client.balance();
-                        } catch (e) {
-                            console.warn("Failed to fetch initial balance, retrying in 1s...", e);
-                            await new Promise(r => setTimeout(r, 1000));
-                            try {
-                                balance = await provider.client.balance();
-                            } catch (e2) {
-                                console.error("Failed to fetch balance after retry:", e2);
-                                // Continue with 0 balance rather than failing connection
-                            }
-                        }
+    const handleBuyChips = async () => {
+        if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+            // Basic validation or alert if funds low? for now simply proceed
+        }
 
-                        setLineraData({
-                            chainId: provider.chainId,
-                            address: provider.address,
-                            balance
-                        });
-                    } catch (error) {
-                        console.error("Failed to connect to Linera:", error);
-                    } finally {
-                        setIsConnecting(false);
-                    }
-                } else {
-                    // Already connected, just sync state
-                    const provider = lineraAdapter.getProvider();
-                    const balance = await provider.client.balance();
-                    setLineraData({
-                        chainId: provider.chainId,
-                        address: provider.address,
-                        balance
-                    });
-                }
-            } else if (!primaryWallet) {
-                setLineraData(null);
-                lineraAdapter.reset();
-            }
-        };
+        setIsBuying(true);
+        try {
+            const chainId = lineraAdapter.getProvider().chainId;
 
-        connectToLinera();
-        connectToLinera();
-    }, [primaryWallet]);
+            // 1. Transfer 1 token to deployer
+            await lineraAdapter.client.transfer({
+                recipient: {
+                    chain_id: chainId,
+                    owner: DEPLOYER_ADDRESS,
+                },
+                amount: 1,
+            });
 
-    // Poll for balance updates
-    useEffect(() => {
-        if (!lineraData) return;
+            // 2. Request chips from contract
+            const mutation = `mutation { requestChips }`;
+            await lineraAdapter.mutate(mutation);
 
-        const interval = setInterval(async () => {
-            try {
-                const provider = lineraAdapter.getProvider();
-                const balance = await provider.client.balance();
-                setLineraData(prev => prev ? { ...prev, balance } : null);
-            } catch (error) {
-                console.error("Failed to poll balance:", error);
-            }
-        }, 5000);
+            // 3. Refresh balance (via context)
+            await refreshData();
 
-        return () => clearInterval(interval);
-    }, [lineraData]);
+            // Close modal on success
+            setIsBuyModalOpen(false);
+        } catch (err: any) {
+            console.error("Failed to buy chips:", err);
+            alert(`Failed to buy chips: ${err.message || err}`);
+        } finally {
+            setIsBuying(false);
+        }
+    };
+
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
     if (primaryWallet && lineraData) {
         return (
-            <div className="flex flex-col items-end gap-2">
-                <div className="px-4 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 font-mono text-sm">
-                    Dynamic: {primaryWallet.address.slice(0, 6)}...{primaryWallet.address.slice(-4)}
+            <div className="relative">
+                <div
+                    className="flex items-center gap-4 px-4 py-2 bg-black/40 border border-green-500/30 rounded-full hover:bg-black/60 transition-all backdrop-blur-md group cursor-pointer"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                >
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-white font-mono text-sm">
+                            {primaryWallet.address.slice(0, 6)}...{primaryWallet.address.slice(-4)}
+                        </span>
+                    </div>
+
+                    <div className="h-4 w-px bg-white/20" />
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-yellow-400 font-bold text-sm">
+                            {lineraData.gameBalance !== undefined ? lineraData.gameBalance : "..."} Chips
+                        </span>
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsBuyModalOpen(true);
+                            }}
+                            className="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 hover:bg-green-500 text-white shadow-sm hover:scale-110 transition-all"
+                            title="Buy Chips"
+                        >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <svg
+                        className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                 </div>
-                <div className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 font-mono text-sm">
-                    Linera Chain: {lineraData.chainId.slice(0, 6)}...
-                </div>
-                <div className="px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg text-purple-400 font-mono text-sm">
-                    Balance: {lineraData.balance}
-                </div>
+
+                {/* Dropdown */}
+                {isDropdownOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-black/90 border border-green-500/30 rounded-xl shadow-xl backdrop-blur-xl overflow-hidden z-50">
+                        <div className="p-4 space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-xs text-gray-400 uppercase tracking-wider">Testnet Balance</label>
+                                <div className="text-purple-400 font-mono text-sm font-semibold truncate">
+                                    {lineraData.balance}
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs text-gray-400 uppercase tracking-wider">Linera Chain ID</label>
+                                <div className="text-green-400 font-mono text-xs break-all leading-tight">
+                                    {lineraData.chainId.slice(0, 16)}...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <ConfirmationModal
+                    isOpen={isBuyModalOpen}
+                    title="Confirm Chip Purchase"
+                    message={`Do you want to use 1 Linera Test Token to purchase 100 Chips?
+
+Current Balance:
+• ${lineraData.balance} Test Tokens
+• ${lineraData.gameBalance} Chips
+
+After Purchase:
+• ${(parseFloat(lineraData.balance) - 1).toFixed(4)} Test Tokens
+• ${(lineraData.gameBalance || 0) + 100} Chips`}
+                    onConfirm={handleBuyChips}
+                    onCancel={() => setIsBuyModalOpen(false)}
+                    isLoading={isBuying}
+                />
             </div>
         );
     }

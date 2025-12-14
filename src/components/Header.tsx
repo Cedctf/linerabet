@@ -3,7 +3,7 @@ import ConnectWallet from "./ConnectWallet";
 
 function Header() {
   return (
-    <header className="border-b border-green-900/30 backdrop-blur-sm bg-black/30">
+    <header className="absolute top-0 w-full z-50 border-b border-green-900/30 backdrop-blur-sm bg-black/30">
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="grid grid-cols-3 items-center">
           {/* Logo */}
