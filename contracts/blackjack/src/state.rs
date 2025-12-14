@@ -28,6 +28,16 @@ pub struct PlayerStateView {
     pub last_result: RegisterView<Option<GameResult>>,
     pub random_seed: RegisterView<u64>,
     pub game_history: LogView<GameRecord>,
+    pub last_roulette_outcome: RegisterView<Option<u8>>,
+    pub roulette_history: LogView<RouletteRecord>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, SimpleObject)]
+pub struct RouletteRecord {
+    pub winning_number: u8,
+    pub total_bet: u64,
+    pub payout: u64,
+    pub timestamp: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, SimpleObject)]

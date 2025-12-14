@@ -51,6 +51,26 @@ export default defineConfig({
     fs: {
       allow: ['..'],
     },
+    proxy: {
+      '/rpc/pops': {
+        target: 'https://linera.pops.one',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rpc\/pops/, ''),
+        secure: false,
+      },
+      '/rpc/sslip': {
+        target: 'https://15.204.31.226.sslip.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rpc\/sslip/, ''),
+        secure: false,
+      },
+      '/rpc/sensei': {
+        target: 'https://linera-testnet.senseinode.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rpc\/sensei/, ''),
+        secure: false,
+      },
+    },
   },
   preview: {
     headers: {

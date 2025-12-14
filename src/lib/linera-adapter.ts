@@ -154,12 +154,14 @@ export class LineraAdapter {
     return response.data as T;
   }
 
-  async mutate(mutation: string): Promise<any> {
+  async mutate(mutation: string, variables?: Record<string, any>): Promise<any> {
     if (!this.application) throw new Error("Application not set");
 
     console.log("🚀 Sending mutation:", mutation);
-    // In Linera, mutations are sent via the query method but with a mutation string
-    const result = await this.application.query(JSON.stringify({ query: mutation }));
+    if (variables) console.log("📦 Variables:", variables);
+
+    const payload = variables ? { query: mutation, variables } : { query: mutation };
+    const result = await this.application.query(JSON.stringify(payload));
     const response = JSON.parse(result);
 
     if (response.errors) {

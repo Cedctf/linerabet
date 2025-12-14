@@ -3,7 +3,7 @@ import ConnectWallet from "./ConnectWallet";
 
 function Header() {
   return (
-    <header className="border-b border-green-900/30 backdrop-blur-sm bg-black/30">
+    <header className="absolute top-0 w-full z-50 border-b border-green-900/30 backdrop-blur-sm bg-black/30">
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="grid grid-cols-3 items-center">
           {/* Logo */}
@@ -24,9 +24,9 @@ function Header() {
 
           {/* Navigation - Centered */}
           <nav className="hidden md:flex space-x-8 justify-center">
-            <Link to="/" className="hover:text-green-400 transition-colors">Games</Link>
-            <a href="#" className="hover:text-green-400 transition-colors">About</a>
-            <a href="#" className="hover:text-green-400 transition-colors">Rewards</a>
+            <Link to="/games" className="hover:text-green-400 text-white transition-colors">Games</Link>
+            <a href="#" className="hover:text-green-400 text-white transition-colors">About</a>
+            <a href="#" className="hover:text-green-400 text-white transition-colors">Rewards</a>
           </nav>
 
           {/* Connect Wallet Button */}

@@ -16,7 +16,7 @@ use linera_sdk::{
 
 use contracts::Operation;
 
-use self::state::{Card, ContractsState, GamePhase, GameRecord, GameResult, ALLOWED_BETS};
+use self::state::{Card, ContractsState, GamePhase, GameRecord, GameResult, RouletteRecord, ALLOWED_BETS};
 
 pub struct ContractsService {
     state: Arc<Mutex<ContractsState>>,
@@ -76,9 +76,19 @@ impl QueryRoot {
         
         let mut history: Vec<GameRecord> = Vec::new();
         let count = player_view.game_history.count();
+        // Limit to last 10 for performance in this demo, or fetch all. 
+        // Logic: fetch all for now or modify consistent with existing.
         for i in 0..count {
             if let Some(record) = player_view.game_history.get(i).await.ok().flatten() {
                 history.push(record);
+            }
+        }
+
+        let mut roulette_history: Vec<RouletteRecord> = Vec::new();
+        let r_count = player_view.roulette_history.count();
+        for i in 0..r_count {
+             if let Some(record) = player_view.roulette_history.get(i).await.ok().flatten() {
+                roulette_history.push(record);
             }
         }
 
@@ -91,6 +101,8 @@ impl QueryRoot {
             dealer_hand: player_view.dealer_hand.get().clone(),
             allowed_bets: ALLOWED_BETS.to_vec(),
             game_history: history,
+            last_roulette_outcome: *player_view.last_roulette_outcome.get(),
+            roulette_history,
         })
     }
 }
@@ -105,6 +117,8 @@ struct PlayerStateObject {
     dealer_hand: Vec<Card>,
     allowed_bets: Vec<u64>,
     game_history: Vec<GameRecord>,
+    last_roulette_outcome: Option<u8>,
+    roulette_history: Vec<RouletteRecord>,
 }
 
 #[cfg(test)]
