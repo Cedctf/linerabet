@@ -30,6 +30,8 @@ pub struct PlayerStateView {
     pub game_history: LogView<GameRecord>,
     pub last_roulette_outcome: RegisterView<Option<u8>>,
     pub roulette_history: LogView<RouletteRecord>,
+    pub last_baccarat_outcome: RegisterView<Option<BaccaratRecord>>,
+    pub baccarat_history: LogView<BaccaratRecord>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, SimpleObject)]
@@ -86,4 +88,18 @@ pub struct GameRecord {
     pub result: GameResult,
     pub payout: u64,
     pub timestamp: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, SimpleObject)]
+pub struct BaccaratRecord {
+    pub player_hand: Vec<Card>,
+    pub banker_hand: Vec<Card>,
+    pub bet: u64,
+    pub bet_type: contracts::BaccaratBetType,
+    pub winner: contracts::BaccaratBetType, // Player, Banker, or Tie
+    pub payout: u64,
+    pub timestamp: u64,
+    pub player_score: u8,
+    pub banker_score: u8,
+    pub is_natural: bool,
 }

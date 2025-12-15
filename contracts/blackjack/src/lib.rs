@@ -40,6 +40,15 @@ pub enum Operation {
     RequestChips,
     /// Spin the roulette wheel with a list of bets.
     SpinRoulette { bets: Vec<RouletteBet> },
+    /// Play a round of Baccarat.
+    PlayBaccarat { amount: u64, bet_type: BaccaratBetType },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
+pub enum BaccaratBetType {
+    Player,
+    Banker,
+    Tie,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, InputObject)]

@@ -9,9 +9,9 @@ use linera_sdk::{
     Contract, ContractRuntime,
 };
 
-use contracts::{BlackjackInit, Operation, RouletteBet, RouletteBetType};
+use contracts::{BlackjackInit, Operation, RouletteBet, RouletteBetType, BaccaratBetType};
 
-use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, RouletteRecord, ALLOWED_BETS};
+use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, RouletteRecord, BaccaratRecord, ALLOWED_BETS};
 
 const SUITS: [&str; 4] = ["clubs", "diamonds", "hearts", "spades"];
 const VALUES: [&str; 13] = [
@@ -113,6 +113,11 @@ impl Contract for ContractsContract {
             }
             Operation::SpinRoulette { bets } => {
                 if let Err(e) = Self::spin_roulette(player, &mut self.runtime, bets) {
+                    panic!("{}", e);
+                }
+            }
+            Operation::PlayBaccarat { amount, bet_type } => {
+                if let Err(e) = Self::play_baccarat(player, &mut self.runtime, amount, bet_type) {
                     panic!("{}", e);
                 }
             }
@@ -403,6 +408,124 @@ impl ContractsContract {
         player.random_seed.set(next);
         next
     }
+
+    fn play_baccarat(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, amount: u64, bet_type: BaccaratBetType) -> Result<(), String> {
+        ensure!(ALLOWED_BETS.contains(&amount), "Invalid bet amount");
+        let balance = *player.player_balance.get();
+        ensure!(balance >= amount, "Insufficient balance");
+
+        // Deduct bet
+        player.player_balance.set(balance - amount);
+
+        // Deal
+        let mut deck = Self::new_shuffled_deck(player);
+        let p1 = draw_card(&mut deck);
+        let b1 = draw_card(&mut deck);
+        let p2 = draw_card(&mut deck);
+        let b2 = draw_card(&mut deck);
+
+        let mut p_hand = vec![p1, p2];
+        let mut b_hand = vec![b1, b2];
+
+        let p_initial = baccarat_score(&p_hand);
+        let b_initial = baccarat_score(&b_hand);
+
+        let mut is_natural = false;
+        if p_initial >= 8 || b_initial >= 8 {
+            is_natural = true;
+        } else {
+            // Player draw rule
+            let mut p_3rd_val: Option<u8> = None;
+            if p_initial <= 5 {
+                let c = draw_card(&mut deck);
+                p_3rd_val = Some(baccarat_card_value(&c));
+                p_hand.push(c);
+            }
+
+            // Banker draw rule
+            let b_draws = if let Some(p3) = p_3rd_val {
+                // Player drew
+                match b_initial {
+                    0..=2 => true,
+                    3 => p3 != 8,
+                    4 => (2..=7).contains(&p3),
+                    5 => (4..=7).contains(&p3),
+                    6 => (6..=7).contains(&p3),
+                    _ => false,
+                }
+            } else {
+                // Player stood
+                b_initial <= 5
+            };
+
+            if b_draws {
+                b_hand.push(draw_card(&mut deck));
+            }
+        }
+
+        let p_final = baccarat_score(&p_hand);
+        let b_final = baccarat_score(&b_hand);
+
+        let winner = if p_final > b_final {
+            BaccaratBetType::Player
+        } else if b_final > p_final {
+            BaccaratBetType::Banker
+        } else {
+            BaccaratBetType::Tie
+        };
+
+        let mut payout: u64 = 0;
+
+        if bet_type == winner {
+            match bet_type {
+                BaccaratBetType::Player => payout = amount * 2,
+                BaccaratBetType::Tie => payout = amount * 9, // 8:1 payout = 9x return
+                BaccaratBetType::Banker => {
+                    // 0.95 * amount + amount = 1.95 * amount
+                    // u64 math: (amount * 195) / 100
+                    payout = (amount as u128 * 195 / 100) as u64;
+                }
+            }
+        } else if winner == BaccaratBetType::Tie && bet_type != BaccaratBetType::Tie {
+            // Push on tie if you didn't bet on tie
+            payout = amount; 
+        }
+
+        player.player_balance.set(*player.player_balance.get() + payout);
+
+        // Record History
+        let now_timestamp = runtime.system_time();
+        let record = BaccaratRecord {
+            player_hand: p_hand,
+            banker_hand: b_hand,
+            bet: amount,
+            bet_type,
+            winner,
+            payout,
+            timestamp: now_timestamp.micros(),
+            player_score: p_final,
+            banker_score: b_final,
+            is_natural,
+        };
+
+        player.baccarat_history.push(record.clone());
+        player.last_baccarat_outcome.set(Some(record));
+
+        Ok(())
+    }
+}
+
+fn baccarat_card_value(card: &Card) -> u8 {
+    match card.value.as_str() {
+        "10" | "jack" | "queen" | "king" => 0,
+        "ace" => 1,
+        v => v.parse().unwrap_or(0),
+    }
+}
+
+fn baccarat_score(hand: &[Card]) -> u8 {
+    let sum: u32 = hand.iter().map(|c| baccarat_card_value(c) as u32).sum();
+    (sum % 10) as u8
 }
 
 fn create_deck() -> Vec<Card> {

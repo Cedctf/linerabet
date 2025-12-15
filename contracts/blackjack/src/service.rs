@@ -16,7 +16,7 @@ use linera_sdk::{
 
 use contracts::Operation;
 
-use self::state::{Card, ContractsState, GamePhase, GameRecord, GameResult, RouletteRecord, ALLOWED_BETS};
+use self::state::{Card, ContractsState, GamePhase, GameRecord, GameResult, RouletteRecord, BaccaratRecord, ALLOWED_BETS};
 
 pub struct ContractsService {
     state: Arc<Mutex<ContractsState>>,
@@ -103,6 +103,17 @@ impl QueryRoot {
             game_history: history,
             last_roulette_outcome: *player_view.last_roulette_outcome.get(),
             roulette_history,
+            last_baccarat_outcome: player_view.last_baccarat_outcome.get().clone(),
+            baccarat_history: {
+                let mut history = Vec::new();
+                let count = player_view.baccarat_history.count();
+                for i in 0..count {
+                     if let Some(record) = player_view.baccarat_history.get(i).await.ok().flatten() {
+                        history.push(record);
+                    }
+                }
+                history
+            },
         })
     }
 }
@@ -119,6 +130,8 @@ struct PlayerStateObject {
     game_history: Vec<GameRecord>,
     last_roulette_outcome: Option<u8>,
     roulette_history: Vec<RouletteRecord>,
+    last_baccarat_outcome: Option<BaccaratRecord>,
+    baccarat_history: Vec<BaccaratRecord>,
 }
 
 #[cfg(test)]
