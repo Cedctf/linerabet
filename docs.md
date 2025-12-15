@@ -396,7 +396,7 @@ const result = await this.application.query(JSON.stringify({ query }));
 ### 1. Build the Contract
 
 ```bash
-cd contracts/blackjack
+cd contracts
 cargo build --release --target wasm32-unknown-unknown
 ```
 
@@ -405,8 +405,8 @@ cargo build --release --target wasm32-unknown-unknown
 ```bash
 # Ensure you are in the root directory
 linera publish-and-create \
-  contracts/blackjack/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
-  contracts/blackjack/target/wasm32-unknown-unknown/release/contracts_service.wasm \
+  contracts/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
+  contracts/target/wasm32-unknown-unknown/release/contracts_service.wasm \
   --json-argument '{"starting_balance": 100, "random_seed": 0}'
 ```
 
