@@ -1,16 +1,15 @@
-import initLinera, {
-  Faucet,
-  Client,
-  Wallet,
-  Application,
-} from "@linera/client";
+import * as lineraPkg from "@linera/client";
 import type { Wallet as DynamicWallet } from "@dynamic-labs/sdk-react-core";
 import { DynamicSigner } from "./dynamic-signer";
 
+// Handle different export structures (default vs named initialize)
+const initLinera = lineraPkg.default || (lineraPkg as any).initialize;
+const { Faucet, Client, Wallet, Application } = lineraPkg;
+
 export interface LineraProvider {
-  client: Client;
-  wallet: Wallet;
-  faucet: Faucet;
+  client: InstanceType<typeof lineraPkg.Client>;
+  wallet: InstanceType<typeof lineraPkg.Wallet>;
+  faucet: InstanceType<typeof lineraPkg.Faucet>;
   address: string;
   chainId: string;
 }
@@ -113,10 +112,8 @@ export class LineraAdapter {
     if (!this.provider) throw new Error("Not connected to Linera");
     if (!appId) throw new Error("Application ID is required");
 
-    // Use client.frontend().application(appId) as per official docs
-    const application = await this.provider.client
-      .frontend()
-      .application(appId);
+    // Use client.application(appId) directly (v0.15.x API)
+    const application = await this.provider.client.application(appId);
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");

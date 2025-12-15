@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
-import { DEPLOYER_ADDRESS } from '../constants';
+import { DEPLOYER_ADDRESS, CONTRACTS_APP_ID } from '../constants';
 import ConfirmationModal from './ConfirmationModal';
 import { useGame } from '../context/GameContext';
 
@@ -21,6 +21,11 @@ export default function ConnectWallet() {
         setIsBuying(true);
         try {
             const chainId = lineraAdapter.getProvider().chainId;
+
+            // Ensure application is set
+            if (!lineraAdapter.isApplicationSet()) {
+                await lineraAdapter.setApplication(CONTRACTS_APP_ID);
+            }
 
             // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
             await lineraAdapter.client.transfer({
