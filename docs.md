@@ -310,6 +310,44 @@ The Roulette frontend is a self-contained page that shares utilities with the Bl
 
 ---
 
+## Example 4: Baccarat
+
+The Baccarat implementation demonstrates how to add a third game to the existing suite, reusing the core infrastructure while implementing specific game rules.
+
+### 1. Unified Contract Structure
+
+Like Roulette, Baccarat is integrated into the `contracts/blackjack` application.
+
+**Operations (`src/lib.rs`):**
+```rust
+pub enum Operation {
+    // ... other ops
+    PlayBaccarat { amount: u64, bet_type: BaccaratBetType },
+}
+
+#[derive(Enum)]
+pub enum BaccaratBetType {
+    Player, Banker, Tie
+}
+```
+
+### 2. Frontend & Utilities
+
+*   **Logic Location**: `src/pages/baccarat.tsx`
+*   **Utilities**: `src/lib/baccarat-utils.ts` (Consolidated game logic and chain types).
+
+**Game Flow:**
+1.  **Select Chip**: User selects a bet amount (e.g., 5).
+2.  **Place Bet**: User selects Player, Banker, or Tie.
+3.  **Execute**:
+    *   Frontend sends `PlayBaccarat` mutation.
+    *   Contract deals cards, applies Third Card Rules, determines winner, and pays out.
+    *   **Banker Commission**: The contract automatically deducts 5% from Banker wins.
+4.  **Result**: The frontend displays the result (Winner, Score, Payout) and offers a "Play Again" button to clear the table.
+
+**Key Implementation Detail:**
+We use a single "Game Context" (`src/context/GameContext.tsx`) to manage the user's balance across all three games, ensuring a seamless casino experience.
+
 ## Dynamic Wallet Integration
 
 LineraBet uses a custom adapter to bridge Ethereum wallets (via Dynamic) to the Linera network.
