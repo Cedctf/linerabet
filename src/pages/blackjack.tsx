@@ -387,7 +387,7 @@ export default function Blackjack() {
           <div className="relative w-full max-w-4xl mb-2">
             <div className="text-center">
               <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
-                Blackjack (On-Chain)
+                Blackjack
               </h1>
             </div>
 
