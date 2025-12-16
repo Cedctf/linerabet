@@ -1,16 +1,16 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Wheel from "../components/roulette/Wheel";
 import Board from "../components/roulette/Board";
 import { GameStages, ValueType } from "../components/roulette/Global";
 import type { Item, PlacedChip } from "../components/roulette/Global";
 import "../components/roulette/roulette.css";
 import { lineraAdapter } from "@/lib/linera-adapter";
-import { CONTRACTS_APP_ID, DEPLOYER_ADDRESS } from "@/constants";
+import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import { BLACK_NUMBERS, calculatePayout, getChipClasses, WHEEL_NUMBERS } from "@/lib/roulette-utils";
 
-type RouletteBetType = "NUMBER" | "RED" | "BLACK" | "EVEN" | "ODD" | "LOW" | "HIGH";
+
 
 const RoulettePage = () => {
   const { lineraData, refreshData } = useGame();

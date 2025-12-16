@@ -1,5 +1,5 @@
 import anime from "animejs";
-import React from "react";
+
 import { useEffect } from "react";
 import type { rouletteData } from "./Global";
 
@@ -95,7 +95,7 @@ const Wheel = (props: { rouletteData: rouletteData, number: any }): JSX.Element 
             },
             duration: singleSpinDuration, // random duration
             easing: `cubicBezier(${bezier.join(",")})`,
-            complete: function (anim: any) {
+            complete: function () {
                 lastNumber = currentNumber;
                 if (props.number.onStop) props.number.onStop(); // Call callback when animation done
             }

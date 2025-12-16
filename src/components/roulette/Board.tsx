@@ -35,7 +35,7 @@ class Board extends React.Component<any, any> {
         return i == 0 || number == null ? "none" : i % 2 == 0 ? "black" : "red";
     };
 
-    getCellItemFromCellItemType(type: any) { }
+    getCellItemFromCellItemType() { }
     getClassNamesFromCellItemType(type: ValueType, number: number | null) {
         var isEvenOdd = 0;
         if (number != null && type === ValueType.NUMBER && number !== 0) {
@@ -232,7 +232,7 @@ class Board extends React.Component<any, any> {
                                     var keyId = 0;
                                     return (
                                         <tr key={"tr_board_" + index}>
-                                            {item.map((cell, cellIndex) => {
+                                            {item.map((cell) => {
                                                 var cellClass = this.getClassNamesFromCellItemType(
                                                     cell.type,
                                                     cell.value

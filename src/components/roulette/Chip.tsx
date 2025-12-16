@@ -1,4 +1,4 @@
-import React from "react";
+
 import classNames from "classnames";
 
 let Chip = function (props: { currentItemChips: any; currentItem: any; leftMin: number | undefined; leftMax: number | undefined; topMin: number | undefined; topMax: number | undefined; }): JSX.Element {

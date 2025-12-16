@@ -3,13 +3,20 @@ import type { Wallet as DynamicWallet } from "@dynamic-labs/sdk-react-core";
 import { DynamicSigner } from "./dynamic-signer";
 
 // Handle different export structures (default vs named initialize)
-const initLinera = lineraPkg.default || (lineraPkg as any).initialize;
-const { Faucet, Client, Wallet, Application } = lineraPkg;
+const initLinera = (lineraPkg as any).default || (lineraPkg as any).initialize;
+const { Faucet, Client } = lineraPkg;
+
+// Helper types inferred from usage since constructors might be private
+type LineraClient = InstanceType<typeof lineraPkg.Client>;
+type LineraFaucet = InstanceType<typeof lineraPkg.Faucet>;
+type LineraWallet = Awaited<ReturnType<LineraFaucet["createWallet"]>>;
+// Note: client.application() returns a Promise<Application>
+type LineraApplication = Awaited<ReturnType<LineraClient["application"]>>;
 
 export interface LineraProvider {
-  client: InstanceType<typeof lineraPkg.Client>;
-  wallet: InstanceType<typeof lineraPkg.Wallet>;
-  faucet: InstanceType<typeof lineraPkg.Faucet>;
+  client: LineraClient;
+  wallet: LineraWallet;
+  faucet: LineraFaucet;
   address: string;
   chainId: string;
 }
@@ -17,7 +24,7 @@ export interface LineraProvider {
 export class LineraAdapter {
   private static instance: LineraAdapter | null = null;
   private provider: LineraProvider | null = null;
-  private application: Application | null = null;
+  private application: LineraApplication | null = null;
   private appId: string | null = null;
   private wasmInitPromise: Promise<unknown> | null = null;
   private connectPromise: Promise<LineraProvider> | null = null;
@@ -175,22 +182,22 @@ export class LineraAdapter {
     return this.provider;
   }
 
-  getFaucet(): Faucet {
+  getFaucet(): LineraFaucet {
     if (!this.provider?.faucet) throw new Error("Faucet not set");
     return this.provider.faucet;
   }
 
-  getWallet(): Wallet {
+  getWallet(): LineraWallet {
     if (!this.provider?.wallet) throw new Error("Wallet not set");
     return this.provider.wallet;
   }
 
-  getApplication(): Application {
+  getApplication(): LineraApplication {
     if (!this.application) throw new Error("Application not set");
     return this.application;
   }
 
-  get client(): Client {
+  get client(): LineraClient {
     if (!this.provider?.client) throw new Error("Client not set");
     return this.provider.client;
   }

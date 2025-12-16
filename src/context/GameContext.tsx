@@ -39,7 +39,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             console.warn("Refreshed game balance failed:", e);
         }
 
-        setLineraData(prev => ({
+        setLineraData(() => ({
             chainId: provider.chainId,
             address: provider.address,
             balance,
@@ -54,7 +54,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                     try {
                         setIsConnecting(true);
                         const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
-                        const provider = await lineraAdapter.connect(primaryWallet, faucetUrl);
+                        await lineraAdapter.connect(primaryWallet, faucetUrl);
 
                         // Set app ID once
                         try {
