@@ -96,7 +96,7 @@ function normalizePhase(phase: string): Phase {
 export default function Blackjack() {
   // On-chain mirrors
   const [balance, setBalance] = useState<number>(0);
-  const [currentBet, setCurrentBet] = useState<number>(0);
+  const [, setCurrentBet] = useState<number>(0);
   const [allowedBets, setAllowedBets] = useState<number[]>([1, 2, 3, 4, 5]);
   const [bet, setBet] = useState<number>(1);
   const [lastBet, setLastBet] = useState<number>(1);

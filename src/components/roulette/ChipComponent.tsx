@@ -63,7 +63,7 @@ function ChipComponent(props: { currentItemChips: any; tdKey: any; cellClass: an
             className={cellClass}
             rowSpan={props.rowSpan}
             colSpan={props.colSpan}
-            onClick={(e) => {
+            onClick={() => {
                 props.onCellClick(cell);
             }}
             style={{ position: "relative" }} // Needed for absolute positioning of chip

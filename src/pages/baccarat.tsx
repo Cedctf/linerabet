@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
