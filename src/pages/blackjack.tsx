@@ -34,18 +34,15 @@ interface GameRecord {
   timestamp: number;
 }
 
-interface BlackjackState {
+interface PlayerState {
+  playerBalance: number;
+  // Flattened Blackjack fields
   currentBet: number;
   phase: Phase;
   lastResult: Result | null;
   playerHand: ChainCard[];
   dealerHand: ChainCard[];
   gameHistory: GameRecord[];
-}
-
-interface PlayerState {
-  playerBalance: number;
-  blackjack: BlackjackState;
 }
 
 interface QueryResponse {
@@ -91,7 +88,8 @@ function normalizePhase(phase: string): Phase {
     DEALER_TURN: "DealerTurn",
     ROUND_COMPLETE: "RoundComplete",
   };
-  return map[phase] || (phase as Phase);
+  // Handle both UPPER_SNAKE_CASE (GraphQL default) and PascalCase (possible overrides)
+  return map[phase.toUpperCase()] || (phase as Phase);
 }
 
 export default function Blackjack() {
@@ -147,28 +145,26 @@ export default function Blackjack() {
         query GetPlayerState($owner: AccountOwner!) {
           player(owner: $owner) {
             playerBalance
-            blackjack {
-              currentBet
-              phase
-              lastResult
-              playerHand {
-                suit
-                value
-                id
-              }
-              dealerHand {
-                suit
-                value
-                id
-              }
-              gameHistory {
-                playerHand { suit value }
-                dealerHand { suit value }
-                bet
-                result
-                payout
-                timestamp
-              }
+            currentBet
+            phase
+            lastResult
+            playerHand {
+              suit
+              value
+              id
+            }
+            dealerHand {
+              suit
+              value
+              id
+            }
+            gameHistory {
+              playerHand { suit value }
+              dealerHand { suit value }
+              bet
+              result
+              payout
+              timestamp
             }
           }
 
@@ -181,17 +177,22 @@ export default function Blackjack() {
       console.log("State refreshed:", data);
 
       if (data.player) {
-        // Check for "new player" state
-        const bjStats = data.player.blackjack;
+        // Flattened response directly on data.player
+        const player = data.player; // It is 'PlayerStateObject' which has the fields directly
+
+        /* 
+           Note: The typescript interface QueryResponse also needs to be updated to match this flat structure
+           but since we cast 'data' to any or just read fields, we must update the usage below.
+        */
 
         // Balance is now handled by GameContext
         // const effectiveBalance = isNewPlayer ? data.defaultBuyIn : data.player.playerBalance;
         // setBalance(effectiveBalance);
-        setCurrentBet(bjStats.currentBet);
+        setCurrentBet(player.currentBet);
         // allowedBets is typically static or matched to contract constants [1,2,3,4,5]
         setAllowedBets([1, 2, 3, 4, 5]);
 
-        const chainPhase = normalizePhase(bjStats.phase);
+        const chainPhase = normalizePhase(player.phase);
         let effectivePhase = chainPhase;
 
         if (chainPhase === "RoundComplete" && (phaseRef.current === "WaitingForBet" || phaseRef.current === "BettingPhase")) {
@@ -202,17 +203,17 @@ export default function Blackjack() {
         }
 
         setPhase(effectivePhase);
-        setLastResult(bjStats.lastResult);
+        setLastResult(player.lastResult);
 
         if (effectivePhase === "WaitingForBet") {
           setPlayerHand([]);
           setDealerHand([]);
         } else {
-          setPlayerHand(normalizeCards(bjStats.playerHand));
-          setDealerHand(normalizeCards(bjStats.dealerHand));
+          setPlayerHand(normalizeCards(player.playerHand));
+          setDealerHand(normalizeCards(player.dealerHand));
         }
 
-        setGameHistory(bjStats.gameHistory);
+        setGameHistory(player.gameHistory);
       } else {
         // Fallback
         // setBalance(data.defaultBuyIn);
@@ -275,11 +276,11 @@ export default function Blackjack() {
         mutation = `mutation { requestChips }`;
       } else if (action === "startGame") {
         const bet = (args as any).bet;
-        mutation = `mutation { blackjackStartGame(bet: ${bet}) }`;
+        mutation = `mutation { startGame(bet: ${bet}) }`;
       } else if (action === "hit") {
-        mutation = `mutation { blackjackHit }`;
+        mutation = `mutation { hit }`;
       } else if (action === "stand") {
-        mutation = `mutation { blackjackStand }`;
+        mutation = `mutation { stand }`;
       } else {
         throw new Error(`Unknown action: ${action}`);
       }
