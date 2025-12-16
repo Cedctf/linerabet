@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useGame } from "@/context/GameContext";
 import CardComp from "../components/Card";
 import {
   calculateHandValue,
@@ -95,7 +96,8 @@ function normalizePhase(phase: string): Phase {
 
 export default function Blackjack() {
   // On-chain mirrors
-  const [balance, setBalance] = useState<number>(0);
+  const { lineraData } = useGame();
+  const balance = lineraData?.gameBalance || 0;
   const [, setCurrentBet] = useState<number>(0);
   const [allowedBets, setAllowedBets] = useState<number[]>([1, 2, 3, 4, 5]);
   const [bet, setBet] = useState<number>(1);
@@ -181,10 +183,10 @@ export default function Blackjack() {
       if (data.player) {
         // Check for "new player" state
         const bjStats = data.player.blackjack;
-        const isNewPlayer = data.player.playerBalance === 0 && bjStats.gameHistory.length === 0;
-        const effectiveBalance = isNewPlayer ? data.defaultBuyIn : data.player.playerBalance;
 
-        setBalance(effectiveBalance);
+        // Balance is now handled by GameContext
+        // const effectiveBalance = isNewPlayer ? data.defaultBuyIn : data.player.playerBalance;
+        // setBalance(effectiveBalance);
         setCurrentBet(bjStats.currentBet);
         // allowedBets is typically static or matched to contract constants [1,2,3,4,5]
         setAllowedBets([1, 2, 3, 4, 5]);
@@ -213,7 +215,7 @@ export default function Blackjack() {
         setGameHistory(bjStats.gameHistory);
       } else {
         // Fallback
-        setBalance(data.defaultBuyIn);
+        // setBalance(data.defaultBuyIn);
         setPhase("WaitingForBet");
         phaseRef.current = "WaitingForBet";
         setAllowedBets([1, 2, 3, 4, 5]);
