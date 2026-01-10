@@ -1,0 +1,107 @@
+.home-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #000;
+}
+
+.home-background {
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+}
+
+.home-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+}
+
+.home-title {
+    font-family: 'Bangers', 'Impact', sans-serif;
+    font-size: 6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #F5E6D3;
+    margin: 0;
+    text-shadow:
+        /* Dark brown 3D depth effect */
+        4px 4px 0 #4A2C2A,
+        5px 5px 0 #4A2C2A,
+        6px 6px 0 #4A2C2A,
+        7px 7px 0 #3D2322,
+        8px 8px 0 #3D2322,
+        /* Bottom shadow for extra depth */
+        8px 10px 4px rgba(0, 0, 0, 0.3);
+    -webkit-text-stroke: 3px #4A2C2A;
+    paint-order: stroke fill;
+}
+
+@keyframes titleGlow {
+    from {
+        filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4));
+    }
+
+    to {
+        filter: drop-shadow(0 0 40px rgba(255, 107, 0, 0.6));
+    }
+}
+
+.play-now-btn {
+    padding: 1rem 3rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #fff;
+    background: linear-gradient(135deg, #FF6B00 0%, #FF0000 100%);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow:
+        0 4px 15px rgba(255, 107, 0, 0.4),
+        0 0 30px rgba(255, 0, 0, 0.2);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.play-now-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.3),
+            transparent);
+    transition: left 0.5s ease;
+}
+
+.play-now-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow:
+        0 8px 25px rgba(255, 107, 0, 0.5),
+        0 0 50px rgba(255, 0, 0, 0.3);
+}
+
+.play-now-btn:hover::before {
+    left: 100%;
+}
+
+.play-now-btn:active {
+    transform: translateY(-1px) scale(1.02);
+}

@@ -1,25 +1,27 @@
+import { useNavigate } from 'react-router-dom';
+import './Home.css';
+
 export default function Home() {
+  const navigate = useNavigate();
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-        backgroundColor: '#000'
-      }}
-    >
+    <div className="home-container">
       <img
         src="/Landing.png"
         alt="Background"
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'fill'
-        }}
+        className="home-background"
       />
+
+      {/* Overlay Content */}
+      <div className="home-overlay">
+        <h1 className="home-title">LineraBet</h1>
+        <button
+          className="play-now-btn"
+          onClick={() => navigate('/game')}
+        >
+          Play Now
+        </button>
+      </div>
     </div>
   );
 }
