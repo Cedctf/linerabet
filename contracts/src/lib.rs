@@ -1,7 +1,7 @@
-use async_graphql::{Enum, InputObject, Request, Response};
+use async_graphql::{Enum, InputObject, Request, Response, SimpleObject};
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
-    linera_base_types::{ContractAbi, ServiceAbi},
+    linera_base_types::{AccountOwner, ChainId, ContractAbi, ServiceAbi},
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,32 +17,159 @@ impl ServiceAbi for ContractsAbi {
     type QueryResponse = Response;
 }
 
+// ============================================================================
+// APPLICATION PARAMETERS (shared across ALL chains - set at deploy time)
+// ============================================================================
+
+/// Parameters set during `publish-and-create`, shared across all chains.
+/// This is the key to multi-chain apps: every chain gets the same bank_chain_id.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct BlackjackInit {
-    /// Starting balance credited to the chain owner when the application is instantiated.
+pub struct CasinoParams {
+    /// The Bank chain ID where game verification happens.
+    /// All player chains will send messages to this chain.
+    pub bank_chain_id: ChainId,
+}
+
+// ============================================================================
+// INSTANTIATION ARGUMENT (per-chain state initialization)
+// ============================================================================
+
+/// Initialization argument for each chain instance.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct CasinoInit {
+    /// Starting balance for new players (chips from faucet)
     pub starting_balance: u64,
-    /// Seed used for deterministic deck shuffling so tests remain reproducible.
+    /// Master seed for RNG (only used on Bank chain)
     pub random_seed: u64,
 }
 
+// ============================================================================
+// OPERATIONS (user-triggered on their own chain)
+// ============================================================================
+
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    /// Reset the game state to WaitingForBet.
-    Reset,
-    /// Lock in the bet and start the game (deal cards). Starts a 20-second player turn timer.
-    StartGame { bet: u64 },
-    /// Request one additional card for the player. Resets the 20-second timer. Auto-stands if timer expires.
-    Hit,
-    /// Stop drawing player cards and let the dealer resolve the round.
-    /// Stop drawing player cards and let the dealer resolve the round.
-    Stand,
-    /// Request chips to reset balance to 100 (Testnet Faucet).
+    /// Request chips from the Bank (testnet faucet)
     RequestChips,
-    /// Spin the roulette wheel with a list of bets.
-    SpinRoulette { bets: Vec<RouletteBet> },
-    /// Play a round of Baccarat.
-    PlayBaccarat { amount: u64, bet_type: BaccaratBetType },
+    
+    /// Start a Blackjack game with given bet (sends escrow to Bank)
+    PlayBlackjack { bet: u64 },
+    
+    /// Hit - draw another card (local computation, then reports to Bank if bust)
+    Hit,
+    
+    /// Stand - finish turn (sends result to Bank for verification)
+    Stand,
 }
+
+// ============================================================================
+// MESSAGES (cross-chain communication)
+// ============================================================================
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum Message {
+    // ─────────────────────────────────────────────────────────────────────────
+    // Player → Bank
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    /// Request chips (testnet faucet)
+    RequestChips {
+        player: AccountOwner,
+        player_chain: ChainId,
+    },
+    
+    /// Start a game with escrowed bet
+    RequestGame {
+        player: AccountOwner,
+        player_chain: ChainId,
+        game_type: GameType,
+        bet: u64,
+    },
+    
+    /// Report game result for verification
+    ReportResult {
+        game_id: u64,
+        player: AccountOwner,
+        actions: Vec<GameAction>,
+    },
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // Bank → Player
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    /// Chips granted from faucet
+    ChipsGranted {
+        player: AccountOwner,
+        amount: u64,
+    },
+    
+    /// Game ready - here's your seed
+    GameReady {
+        game_id: u64,
+        seed: u64,
+        bet: u64,
+    },
+    
+    /// Game settled after verification
+    GameSettled {
+        game_id: u64,
+        result: GameResult,
+        payout: u64,
+    },
+}
+
+// ============================================================================
+// GAME TYPES
+// ============================================================================
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
+pub enum GameType {
+    Blackjack,
+    Roulette,
+    Baccarat,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
+pub enum GameAction {
+    Hit,
+    Stand,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
+pub enum GameResult {
+    PlayerBlackjack,
+    PlayerWin,
+    DealerWin,
+    PlayerBust,
+    DealerBust,
+    Push,
+}
+
+// ============================================================================
+// CARD TYPES (shared between chains)
+// ============================================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, SimpleObject)]
+pub struct Card {
+    pub suit: String,
+    pub value: String,
+    pub id: String,
+}
+
+impl Card {
+    pub fn new(suit: &str, value: &str) -> Self {
+        let id = format!("{}_of_{}", value, suit);
+        Self {
+            suit: suit.to_string(),
+            value: value.to_string(),
+            id,
+        }
+    }
+}
+
+// ============================================================================
+// LEGACY TYPES (for roulette/baccarat - to be migrated later)
+// ============================================================================
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
 pub enum BaccaratBetType {
@@ -65,6 +192,6 @@ pub enum RouletteBetType {
     Black,
     Even,
     Odd,
-    Low,  // 1-18
-    High, // 19-36
+    Low,
+    High,
 }
