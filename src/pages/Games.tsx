@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import ConnectWallet from '../components/ConnectWallet';
 
 const games = [
     {
@@ -35,11 +34,8 @@ export default function Games() {
             {/* Header */}
             <div className="relative z-20 flex justify-between items-center px-8 py-6">
                 <h1 className="text-5xl md:text-6xl font-black italic tracking-wider text-white drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                    GAME MODE
+                    SELECT GAME
                 </h1>
-                <div className="bg-black/40 backdrop-blur-sm p-2 rounded-lg border border-white/10">
-                    <ConnectWallet />
-                </div>
             </div>
 
             {/* Cards Container */}
