@@ -10,17 +10,18 @@ path = "src/lib.rs"
 
 [dependencies]
 # Match your linera-sdk version
-linera-sdk = "0.15.4"
-linera-views = "0.15.4"
-linera-base = "0.15.4"
+linera-sdk = "0.15.8"
+linera-views = "0.15.8"
+linera-base = "0.15.8"
 
 async-graphql = { version = "=7.0.17", default-features = false }
+async-graphql-value = "=7.0.17"
 futures = { version = "0.3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 
 [dev-dependencies]
-linera-sdk = { version = "0.15.4", features = ["test", "wasmer"] }
+linera-sdk = { version = "0.15.8", features = ["test", "wasmer"] }
 tokio = { version = "1.40", features = ["rt", "sync"] }
 
 [[bin]]

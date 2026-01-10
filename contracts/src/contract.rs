@@ -417,12 +417,12 @@ impl ContractsContract {
         let game_id = *self.state.game_counter.get();
         self.state.game_counter.set(game_id + 1);
         
-        // Generate deterministic seed
+        // Generate deterministic seed using master seed + game_id + player + TIMESTAMP
         let master_seed = *self.state.master_seed.get();
-        let seed = generate_game_seed(master_seed, game_id, &player);
+        let now = self.runtime.system_time().micros();
+        let seed = generate_game_seed(master_seed, game_id, &player, now);
         
         // Store pending game
-        let now = self.runtime.system_time().micros();
         let pending = PendingGame {
             player,
             player_chain,
@@ -577,12 +577,13 @@ fn shuffle(deck: &mut [Card], seed: u64) {
     }
 }
 
-fn generate_game_seed(master_seed: u64, game_id: u64, player: &linera_base::identifiers::AccountOwner) -> u64 {
+fn generate_game_seed(master_seed: u64, game_id: u64, player: &linera_base::identifiers::AccountOwner, timestamp: u64) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     master_seed.hash(&mut hasher);
     game_id.hash(&mut hasher);
     player.hash(&mut hasher);
+    timestamp.hash(&mut hasher); // Mix in the timestamp
     hasher.finish()
 }
 
