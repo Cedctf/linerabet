@@ -266,12 +266,13 @@ export default function Blackjack2() {
                                         <button
                                             key={val}
                                             onClick={() => setBet(val)}
-                                            className={`w-12 h-12 rounded-full border-3 flex items-center justify-center font-bold text-sm transition-all shadow-lg ${bet === val
-                                                ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                                                : "border-white/50 bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
-                                                }`}
+                                            className={`relative transition-all hover:scale-110 ${bet === val ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
                                         >
-                                            {val}
+                                            <img
+                                                src={`/Chips/chip${val}.png`}
+                                                alt={`$${val} Chip`}
+                                                className="w-16 h-16 object-contain"
+                                            />
                                         </button>
                                     ))}
                                 </div>
