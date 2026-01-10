@@ -278,9 +278,13 @@ export default function Blackjack2() {
                                 </div>
                                 <button
                                     onClick={startGame}
-                                    className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-xl text-lg hover:scale-105 transition-all"
+                                    className="w-full mt-2 hover:scale-105 transition-all flex justify-center"
                                 >
-                                    🎲 Deal ({bet})
+                                    <img
+                                        src="/deal.png"
+                                        alt="Deal"
+                                        className="h-16 object-contain drop-shadow-lg"
+                                    />
                                 </button>
                             </div>
                         </div>
