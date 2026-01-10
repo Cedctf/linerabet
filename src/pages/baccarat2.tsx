@@ -246,58 +246,70 @@ export default function Baccarat2Page() {
                 {/* Header Removed */}
 
                 {/* Chip Selection - Bottom Center */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 p-4 rounded-xl border border-white/10 w-full max-w-xl backdrop-blur-sm shadow-md flex flex-col items-center z-50">
-                    <h3 className="text-red-200 font-semibold uppercase tracking-wider text-xs mb-2">Select Chip Value</h3>
-                    <div className="flex items-center gap-3 flex-wrap justify-center">
-                        {allowedBets.map((chipValue) => (
-                            <button
-                                key={chipValue}
-                                onClick={() => setBetAmount(chipValue)}
-                                disabled={busy || balance < chipValue}
-                                className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${betAmount === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
-                            >
-                                <img
-                                    src={`/Chips/chip${chipValue}.png`}
-                                    alt={`$${chipValue} Chip`}
-                                    className="w-16 h-16 object-contain"
-                                />
-                            </button>
-                        ))}
-                    </div>
-                </div>
 
-                {/* Bottom Right Controls - Vertical Stack */}
+
+                {/* Bottom Right Controls - Combined */}
+                {/* Bottom Right Controls - Combined */}
                 <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-50">
-                    <div className="text-xl font-mono text-yellow-400 font-bold bg-black/40 px-4 py-2 rounded-lg backdrop-blur-sm border border-yellow-500/30 mb-2">
-                        Bet: {betAmount} Chips
+                    {/* Main Control Panel */}
+                    <div className="bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-4 items-center">
+
+                        {/* Chip Selection */}
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="text-sm font-semibold text-white/80 text-center">Select Chip Value</div>
+                            <div className="flex items-center gap-2">
+                                {allowedBets.map((chipValue) => (
+                                    <button
+                                        key={chipValue}
+                                        onClick={() => setBetAmount(chipValue)}
+                                        disabled={busy || balance < chipValue}
+                                        className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${betAmount === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
+                                    >
+                                        <img
+                                            src={`/Chips/chip${chipValue}.png`}
+                                            alt={`$${chipValue} Chip`}
+                                            className="w-12 h-12 object-contain"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Betting Buttons - Reverted to Text */}
+                        <div className="flex flex-row gap-3 w-full justify-center">
+                            <button
+                                onClick={() => setBetType("PLAYER")}
+                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/40 border-blue-800 hover:bg-blue-900/60 backdrop-blur-md"}`}
+                            >
+                                BET PLAYER
+                            </button>
+                            <button
+                                onClick={() => setBetType("TIE")}
+                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/40 border-green-800 hover:bg-green-900/60 backdrop-blur-md"}`}
+                            >
+                                BET TIE
+                            </button>
+                            <button
+                                onClick={() => setBetType("BANKER")}
+                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/40 border-red-800 hover:bg-red-900/60 backdrop-blur-md"}`}
+                            >
+                                BET BANKER
+                            </button>
+                        </div>
+
+                        {/* Deal Button */}
+                        <button
+                            onClick={placeBet}
+                            disabled={busy || !!lastOutcome}
+                            className="w-full mt-2 hover:scale-105 transition-all flex justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <img
+                                src="/deal.png"
+                                alt="Deal"
+                                className="h-16 object-contain drop-shadow-lg"
+                            />
+                        </button>
                     </div>
-
-                    <button
-                        onClick={() => setBetType("PLAYER")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/40 border-blue-800 hover:bg-blue-900/60 backdrop-blur-md"}`}
-                    >
-                        BET PLAYER
-                    </button>
-                    <button
-                        onClick={() => setBetType("TIE")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/40 border-green-800 hover:bg-green-900/60 backdrop-blur-md"}`}
-                    >
-                        BET TIE
-                    </button>
-                    <button
-                        onClick={() => setBetType("BANKER")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/40 border-red-800 hover:bg-red-900/60 backdrop-blur-md"}`}
-                    >
-                        BET BANKER
-                    </button>
-
-                    <button
-                        onClick={placeBet}
-                        disabled={busy || !!lastOutcome}
-                        className="w-48 py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-2xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-                    >
-                        {busy ? "..." : "DEAL"}
-                    </button>
                 </div>
 
                 {/* Game Area - Absolute Positioning for Manual Placement */}
