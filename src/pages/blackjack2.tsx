@@ -314,10 +314,33 @@ export default function Blackjack2() {
                                 </div>
                             </div>
 
-                            {/* Result Banner - Center */}
+                            {/* Result Popup with Try Again - Center */}
                             {phase === "RoundComplete" && lastResult && (
-                                <div className={`text-3xl font-bold px-8 py-4 rounded-xl shadow-2xl ${resultClass}`}>
-                                    {renderResult(lastResult)}
+                                <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center">
+                                    <div className="relative">
+                                        {/* Win/Lose Image */}
+                                        <img
+                                            src={
+                                                lastResult === "PLAYER_BLACKJACK" || lastResult === "PLAYER_WIN" || lastResult === "DEALER_BUST"
+                                                    ? "/animations/win.png"
+                                                    : "/animations/lose.png"
+                                            }
+                                            alt={lastResult === "PLAYER_BLACKJACK" || lastResult === "PLAYER_WIN" || lastResult === "DEALER_BUST" ? "You Win!" : "You Lose"}
+                                            className="max-w-[50vw] max-h-[60vh] object-contain"
+                                        />
+                                        {/* Try Again Button - Overlaid at bottom of image */}
+                                        <button
+                                            onClick={() => setPhase("WaitingForBet")}
+                                            className="absolute bottom-[5%] left-1/2 -translate-x-1/2 hover:scale-110 transition-transform"
+                                            style={{ width: '15vw', height: '12vh' }}
+                                        >
+                                            <img
+                                                src="/buttons/try-again.png"
+                                                alt="Play Again"
+                                                className="w-full h-full object-contain"
+                                            />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -369,18 +392,6 @@ export default function Blackjack2() {
                                             alt="Stand"
                                             className="w-full h-full object-contain hidden group-hover:block"
                                         />
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Play Again - Bottom Right Corner */}
-                            {phase === "RoundComplete" && (
-                                <div className="absolute bottom-4 right-4">
-                                    <button
-                                        onClick={() => setPhase("WaitingForBet")}
-                                        className="px-8 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold text-xl rounded-xl shadow-lg hover:scale-105 transition-all"
-                                    >
-                                        Play Again
                                     </button>
                                 </div>
                             )}
