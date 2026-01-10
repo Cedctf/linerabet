@@ -6,19 +6,19 @@ const games = [
         name: 'Roulette',
         path: '/roulette',
         description: 'Spin the wheel of fortune and test your luck.',
-        image: '/games/roulette.jpg' // Assuming these images exist as per Home.tsx
+        image: '/roulette.jpg'
     },
     {
         name: 'Blackjack',
         path: '/blackjack',
         description: 'Beat the dealer with classic 21.',
-        image: '/games/blackjack.jpg'
+        image: '/blackjack.png'
     },
     {
         name: 'Baccarat',
         path: '/baccarat',
         description: 'High stakes elegance and simple rules.',
-        image: '/games/baccarat.jpg'
+        image: '/baccarat.png'
     }
 ];
 
