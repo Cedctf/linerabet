@@ -254,12 +254,13 @@ export default function Baccarat2Page() {
                                 key={chipValue}
                                 onClick={() => setBetAmount(chipValue)}
                                 disabled={busy || balance < chipValue}
-                                className={`relative w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-base transition-all shadow-lg ${betAmount === chipValue
-                                    ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                                    : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
-                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${betAmount === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
                             >
-                                {chipValue}
+                                <img
+                                    src={`/Chips/chip${chipValue}.png`}
+                                    alt={`$${chipValue} Chip`}
+                                    className="w-16 h-16 object-contain"
+                                />
                             </button>
                         ))}
                     </div>
