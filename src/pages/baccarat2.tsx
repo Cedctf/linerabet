@@ -243,12 +243,7 @@ export default function Baccarat2Page() {
                     </button>
                 </div>
 
-                {/* Header */}
-                <div className="relative w-full max-w-4xl mb-4 flex justify-center items-center shrink-0">
-                    <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
-                        Baccarat 2
-                    </h1>
-                </div>
+                {/* Header Removed */}
 
                 {/* Chip Selection - Bottom Center */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 p-4 rounded-xl border border-white/10 w-full max-w-xl backdrop-blur-sm shadow-md flex flex-col items-center z-50">
@@ -304,46 +299,48 @@ export default function Baccarat2Page() {
                     </button>
                 </div>
 
-                {/* Game Area */}
-                <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-12 mb-4 shrink-0">
+                {/* Game Area - Absolute Positioning for Manual Placement */}
+                <div className="absolute inset-0 pointer-events-none">
                     {/* Player Hand */}
-                    <div className="col-span-1 bg-blue-900/20 p-6 rounded-2xl border-2 border-blue-500/30 flex flex-col items-center backdrop-blur-sm">
-                        <h2 className="text-2xl font-bold text-blue-400 mb-4 tracking-widest">PLAYER</h2>
-                        <div className="flex gap-4 min-h-[120px] items-center justify-center flex-wrap">
+                    {/* Mobile: Top 15%, Centered. Desktop: Top 20%, Left 25% */}
+                    <div className="absolute top-[15%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-[25%] md:translate-x-0 md:top-[20%] pointer-events-auto bg-blue-900/20 p-4 md:p-6 rounded-2xl border-2 border-blue-500/30 flex flex-col items-center backdrop-blur-sm transition-all duration-300 hover:border-blue-400/50">
+                        <h2 className="text-xl md:text-2xl font-bold text-blue-400 mb-2 md:mb-4 tracking-widest">PLAYER</h2>
+                        <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
                             {lastOutcome ? (
                                 lastOutcome.playerHand.map((c, i) => (
                                     <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={window.innerWidth < 768 ? 60 : 80} height={window.innerWidth < 768 ? 84 : 112} />
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-blue-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-blue-500/30 rounded-lg w-20 h-28 flex items-center justify-center">?</div>
+                                <div className="text-blue-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-blue-500/30 rounded-lg w-16 h-24 md:w-20 md:h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
-                        {lastOutcome && <div className="text-5xl font-black mt-4 text-white drop-shadow-lg">{lastOutcome.playerScore}</div>}
+                        {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.playerScore}</div>}
                     </div>
 
                     {/* Banker Hand */}
-                    <div className="col-span-1 bg-red-900/20 p-6 rounded-2xl border-2 border-red-500/30 flex flex-col items-center backdrop-blur-sm">
-                        <h2 className="text-2xl font-bold text-red-400 mb-4 tracking-widest">BANKER</h2>
-                        <div className="flex gap-4 min-h-[120px] items-center justify-center flex-wrap">
+                    {/* Mobile: Top 45%, Centered. Desktop: Top 20%, Right 25% */}
+                    <div className="absolute top-[45%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-auto md:right-[25%] md:translate-x-0 md:top-[20%] pointer-events-auto bg-red-900/20 p-4 md:p-6 rounded-2xl border-2 border-red-500/30 flex flex-col items-center backdrop-blur-sm transition-all duration-300 hover:border-red-400/50">
+                        <h2 className="text-xl md:text-2xl font-bold text-red-400 mb-2 md:mb-4 tracking-widest">BANKER</h2>
+                        <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
                             {lastOutcome ? (
                                 lastOutcome.bankerHand.map((c, i) => (
                                     <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={window.innerWidth < 768 ? 60 : 80} height={window.innerWidth < 768 ? 84 : 112} />
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-red-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-red-500/30 rounded-lg w-20 h-28 flex items-center justify-center">?</div>
+                                <div className="text-red-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-red-500/30 rounded-lg w-16 h-24 md:w-20 md:h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
-                        {lastOutcome && <div className="text-5xl font-black mt-4 text-white drop-shadow-lg">{lastOutcome.bankerScore}</div>}
+                        {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.bankerScore}</div>}
                     </div>
                 </div>
 
-                {/* Outcome Message & Controls */}
-                {lastOutcome ? (
-                    <div className="flex flex-col items-center gap-4 mb-4 w-full max-w-lg mx-auto bg-green-900/50 p-4 rounded-xl border border-green-500/30 backdrop-blur-sm shrink-0">
+                {/* Outcome Message & Controls - Absolute Positioned above Chip Selection */}
+                {lastOutcome && (
+                    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 mb-4 w-full max-w-lg mx-auto bg-green-900/90 p-4 rounded-xl border border-green-500/30 backdrop-blur-md z-[60] shadow-2xl">
                         <div className="text-center animate-bounce">
                             <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 drop-shadow-sm uppercase">
                                 {lastOutcome.winner} WINS
@@ -366,8 +363,6 @@ export default function Baccarat2Page() {
                             Play Again
                         </button>
                     </div>
-                ) : (
-                    <div className="h-16 shrink-0"></div> // Spacer
                 )}
             </div>
 
