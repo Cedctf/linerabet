@@ -332,10 +332,11 @@ export default function Blackjack2() {
 
                             {/* Controls - Bottom Right Corner */}
                             {phase === "PlayerTurn" && (
-                                <div className="absolute bottom-4 right-4 flex flex-row gap-4">
+                                <div className="fixed bottom-4 right-4 flex flex-row gap-4 z-30">
                                     <button
                                         onClick={hit}
-                                        className="group relative w-[240px] h-[126px] hover:scale-110 transition-transform"
+                                        className="group relative hover:scale-110 transition-transform"
+                                        style={{ width: '8vw', height: '18vh' }}
                                     >
                                         <img
                                             src="/buttons/hit.png"
@@ -350,7 +351,8 @@ export default function Blackjack2() {
                                     </button>
                                     <button
                                         onClick={stand}
-                                        className="group relative w-[360px] h-[180px] hover:scale-110 transition-transform"
+                                        className="group relative hover:scale-110 transition-transform"
+                                        style={{ width: '8vw', height: '18vh' }}
                                     >
                                         <img
                                             src="/buttons/stand.png"
