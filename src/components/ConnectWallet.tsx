@@ -28,6 +28,8 @@ export default function ConnectWallet() {
             }
 
             // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
+            // 1. Transfer skipped to simplify UX (devnet/testnet faucet)
+            /*
             await lineraAdapter.client.transfer({
                 recipient: {
                     chain_id: chainId,
@@ -35,6 +37,7 @@ export default function ConnectWallet() {
                 },
                 amount: 1,
             });
+            */
 
             // 2. Request chips from contract
             const mutation = `mutation { requestChips }`;

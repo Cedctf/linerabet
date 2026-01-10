@@ -106,6 +106,7 @@ export default function Blackjack() {
   const [lastBet, setLastBet] = useState<number>(1);
   const [phase, setPhase] = useState<Phase>("WaitingForGame");
   const [lastResult, setLastResult] = useState<Result>(null);
+  const [lastPayout, setLastPayout] = useState<number>(0);
   const [currentGameId, setCurrentGameId] = useState<number | null>(null);
 
   const [playerHand, setPlayerHand] = useState<BlackjackCard[]>([]);
@@ -117,10 +118,10 @@ export default function Blackjack() {
   const [showHistory, setShowHistory] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [waitingForSeed, setWaitingForSeed] = useState(false);
+  const [waitingForResult, setWaitingForResult] = useState(false);
 
   // Derived
   const canPlay = phase === "PlayerTurn";
-  const roundOver = phase === "RoundComplete";
 
   const playerValue = useMemo(() => calculateHandValue(playerHand), [playerHand]);
   const dealerValue = useMemo(() => {
@@ -131,6 +132,12 @@ export default function Blackjack() {
   }, [dealerHand, phase]);
   const playerBust = playerValue > 21;
   const dealerBust = dealerValue > 21;
+
+  // Calculate net win/loss
+  const netResult = useMemo(() => {
+    if (lastResult === null) return 0;
+    return lastPayout - lastBet; // positive = win, negative = loss, 0 = push
+  }, [lastPayout, lastBet]);
 
   const refresh = useCallback(async () => {
     if (!lineraAdapter.isChainConnected()) return;
@@ -173,7 +180,9 @@ export default function Blackjack() {
 
       setBalance(data.playerBalance || 0);
       setAllowedBets(data.allowedBets || [1, 2, 3, 4, 5]);
-      setGameHistory(data.gameHistory || []);
+
+      const newHistory = data.gameHistory || [];
+      setGameHistory(newHistory);
 
       if (data.currentGame) {
         const game = data.currentGame;
@@ -183,8 +192,20 @@ export default function Blackjack() {
         setDealerHand(normalizeCards(game.dealerHand));
         setWaitingForSeed(false);
       } else {
-        // No active game
-        if (!waitingForSeed) {
+        // No active game - check if we just finished one
+        if (waitingForResult && newHistory.length > 0) {
+          // Game ended! Get result from latest history
+          const latestGame = newHistory[newHistory.length - 1];
+          setLastResult(latestGame.result);
+          setLastPayout(latestGame.payout);
+          setLastBet(latestGame.bet);
+          setPlayerHand(normalizeCards(latestGame.playerHand));
+          setDealerHand(normalizeCards(latestGame.dealerHand));
+          setPhase("RoundComplete");
+          setWaitingForResult(false);
+        } else if (!waitingForSeed && !waitingForResult && phase !== "RoundComplete") {
+          // Only reset to WaitingForGame if not on RoundComplete
+          // User must click "Play Again" to leave RoundComplete
           setPhase("WaitingForGame");
           setPlayerHand([]);
           setDealerHand([]);
@@ -192,7 +213,7 @@ export default function Blackjack() {
         }
       }
 
-      // Check if waiting for seed (game requested but not yet received)
+      // Check if seed arrived
       if (waitingForSeed && data.currentGame) {
         setWaitingForSeed(false);
       }
@@ -200,7 +221,7 @@ export default function Blackjack() {
     } catch (err) {
       console.error("Failed to refresh game state:", err);
     }
-  }, [waitingForSeed]);
+  }, [waitingForSeed, waitingForResult]);
 
   useEffect(() => {
     const handleConnectionChange = () => {
@@ -216,52 +237,110 @@ export default function Blackjack() {
     return () => unsubscribe();
   }, [refresh]);
 
-  // Poll for updates (cross-chain messages may take time)
+  // Poll for updates - faster when waiting for Bank responses
   useEffect(() => {
     if (!isConnected) return;
+
+    // Poll faster when waiting for cross-chain response
+    const pollInterval = (waitingForSeed || waitingForResult) ? 800 : 3000;
+
     const syncInterval = setInterval(() => {
       if (!busy) {
         refresh().catch(console.error);
       }
-    }, 3000); // Poll every 3 seconds for cross-chain updates
+    }, pollInterval);
     return () => clearInterval(syncInterval);
-  }, [busy, isConnected, refresh]);
+  }, [busy, isConnected, refresh, waitingForSeed, waitingForResult]);
+
+
 
   const handleAction = async (action: string, args: object = {}) => {
     setBusy(true);
     try {
       let mutation: string;
+      let actionDescription: string;
 
       if (action === "requestChips") {
         mutation = `mutation { requestChips }`;
+        actionDescription = "🎁 Requesting chips from Bank (sends cross-chain message)";
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📝 ACTION: Request Chips");
+        console.log("📍 You are signing to: Send RequestChips message to Bank chain");
+        console.log("💰 This transaction: Sends a cross-chain message asking for free chips");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       } else if (action === "playBlackjack") {
         const betAmount = (args as any).bet;
         mutation = `mutation { playBlackjack(bet: ${betAmount}) }`;
+        actionDescription = `🎲 Starting game - Bet ${betAmount} chips (escrow to Bank)`;
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📝 ACTION: Play Blackjack");
+        console.log(`📍 You are signing to: Deduct ${betAmount} chips and start a game`);
+        console.log("💰 This transaction:");
+        console.log(`   1. Deducts ${betAmount} chips from your balance`);
+        console.log("   2. Sends RequestGame message to Bank chain with escrowed bet");
+        console.log("   3. Waits for Bank to send back game seed");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         setWaitingForSeed(true);
+        setLastResult(null);
+        setLastPayout(0);
       } else if (action === "hit") {
         mutation = `mutation { hit }`;
+        actionDescription = "👆 Hit - Draw another card";
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📝 ACTION: Hit");
+        console.log("📍 You are signing to: Draw another card from the deck");
+        console.log("💰 This transaction:");
+        console.log("   1. Draws a card locally using the deterministic seed");
+        console.log("   2. If bust (>21), auto-sends ReportResult to Bank");
+        console.log("   3. No additional signing needed for bust report");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       } else if (action === "stand") {
         mutation = `mutation { stand }`;
+        actionDescription = "✋ Stand - Finish turn (Bank verifies result)";
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📝 ACTION: Stand");
+        console.log("📍 You are signing to: End your turn and request result verification");
+        console.log("💰 This transaction:");
+        console.log("   1. Records your Stand action");
+        console.log("   2. Sends ReportResult message to Bank");
+        console.log("   3. Bank replays game with seed, verifies, sends payout");
+        console.log("   4. NO additional signing needed for payout - it arrives automatically!");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        setWaitingForResult(true);
+      } else if (action === "doubleDown") {
+        mutation = `mutation { doubleDown }`;
+        actionDescription = "✌️ Double Down - Double bet, take one card, stand";
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📝 ACTION: Double Down");
+        console.log("📍 You are signing to: Double your bet and take exactly one more card");
+        console.log("💰 This transaction:");
+        console.log("   1. Doubles your bet (deducts additional chips)");
+        console.log("   2. Draws exactly one card");
+        console.log("   3. Automatically stands and sends ReportResult to Bank");
+        console.log("   4. Bank verifies and sends payout (2x doubled bet if you win!)");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        setWaitingForResult(true);
       } else {
         throw new Error(`Unknown action: ${action}`);
       }
 
+      console.log("🔐 Waiting for wallet signature...");
+      console.log(`🎯 Action: ${actionDescription}`);
+
       await lineraAdapter.mutate(mutation);
 
-      // Wait a bit for cross-chain message processing
-      if (action === "playBlackjack") {
-        // Poll more frequently while waiting for seed
-        for (let i = 0; i < 10; i++) {
-          await new Promise(r => setTimeout(r, 1000));
-          await refresh();
-          if (phase === "PlayerTurn") break;
-        }
-      } else {
-        await refresh();
-      }
+      console.log("✅ Signature confirmed! Transaction sent.");
+
+      // Immediately refresh after mutation
+      await refresh();
+
+      // For playBlackjack, the polling will handle waiting for seed
+      // No need for extra wait loop here
+
     } catch (err: any) {
       console.error(`Failed to execute ${action}:`, err);
       setWaitingForSeed(false);
+      setWaitingForResult(false);
       alert(`Action failed: ${err.message || JSON.stringify(err)}`);
     } finally {
       setBusy(false);
@@ -282,11 +361,26 @@ export default function Blackjack() {
   async function onHit() {
     if (busy || phase !== "PlayerTurn") return;
     await handleAction("hit");
+    // Check if bust happened (will be visible in next refresh)
+    setTimeout(async () => {
+      await refresh();
+      // If player busted, they need to wait for Bank verification
+      if (playerValue > 21) {
+        setWaitingForResult(true);
+      }
+    }, 300);
   }
 
   async function onStand() {
     if (busy || phase !== "PlayerTurn") return;
     await handleAction("stand");
+  }
+
+  async function onDoubleDown() {
+    if (busy || phase !== "PlayerTurn") return;
+    if (playerHand.length !== 2) return; // Only on first 2 cards
+    if (balance < lastBet) return; // Need enough to double
+    await handleAction("doubleDown");
   }
 
   function onRepeatBet() {
@@ -347,10 +441,6 @@ export default function Blackjack() {
               <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
                 Blackjack
               </h1>
-              <div className="text-green-300 text-sm">
-                Balance: {balance} chips
-                {waitingForSeed && <span className="ml-2 animate-pulse">⏳ Waiting for game seed...</span>}
-              </div>
             </div>
 
             <button
@@ -361,14 +451,52 @@ export default function Blackjack() {
             </button>
           </div>
 
+          {/* Round Complete - Result and Action Buttons */}
+          {phase === "RoundComplete" && lastResult && (
+            <div className="flex flex-col items-center gap-6 w-full max-w-2xl">
+              {/* Result Banner */}
+              <div className={`w-full rounded-xl p-6 text-center ${resultClass}`}>
+                <div className="text-4xl font-bold mb-3">{renderResult(lastResult)}</div>
+                <div className="flex justify-center gap-6 text-lg">
+                  <div>Bet: <span className="font-bold text-yellow-300">{lastBet}</span></div>
+                  <div>Payout: <span className={`font-bold ${lastPayout > 0 ? "text-green-300" : "text-gray-300"}`}>{lastPayout}</span></div>
+                  <div className={`font-bold px-3 py-1 rounded ${netResult > 0 ? "bg-green-600/50" : netResult < 0 ? "bg-red-600/50" : "bg-yellow-600/50"}`}>
+                    {netResult > 0 ? `+${netResult}` : netResult} chips
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setPhase("WaitingForGame");
+                    setLastResult(null);
+                    setPlayerHand([]);
+                    setDealerHand([]);
+                    setCurrentGameId(null);
+                  }}
+                  className="px-8 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-xl text-xl transform hover:scale-105 transition-all"
+                >
+                  🎲 Play Again
+                </button>
+                <a
+                  href="/"
+                  className="px-8 py-4 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white font-bold rounded-lg shadow-xl text-xl transform hover:scale-105 transition-all"
+                >
+                  🏠 Go Home
+                </a>
+              </div>
+            </div>
+          )}
+
+
           {/* Waiting for Game / Place Bet */}
-          {phase === "WaitingForGame" && !waitingForSeed && (
+          {phase === "WaitingForGame" && !waitingForSeed && !waitingForResult && (
             <div className="flex flex-col items-center gap-4 w-full max-w-2xl">
               <div className="flex flex-col items-center gap-4 bg-green-900/50 p-6 rounded-lg border-2 border-green-700/50 w-full">
                 <h3 className="text-2xl font-semibold text-green-200">Place Your Bet</h3>
-                <p className="text-green-300 text-sm">Select chips and start game (cross-chain)</p>
-
-
+                <p className="text-green-300 text-sm">Select chips and start game</p>
 
                 {/* Chip selector */}
                 <div className="flex items-center gap-4 flex-wrap justify-center">
@@ -417,49 +545,28 @@ export default function Blackjack() {
             </div>
           )}
 
-          {/* Waiting for seed */}
-          {waitingForSeed && (
+          {/* Waiting for seed/result */}
+          {(waitingForSeed || waitingForResult) && phase !== "RoundComplete" && (
             <div className="flex flex-col items-center gap-4 bg-green-900/50 p-10 rounded-lg border-2 border-green-700/50 w-full max-w-2xl">
               <div className="text-center">
                 <div className="text-2xl font-bold text-yellow-400 animate-pulse">
-                  ⏳ Waiting for Bank...
+                  ⏳ {waitingForSeed ? "Waiting for Bank..." : "Verifying result..."}
                 </div>
                 <div className="text-green-300 text-sm mt-2">
-                  Cross-chain message sent. Waiting for game seed from Bank chain.
+                  {waitingForSeed
+                    ? "Cross-chain message sent. Getting game seed from Bank."
+                    : "Bank is verifying your game result..."}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Round Complete */}
-          {phase === "RoundComplete" && lastResult && (
-            <div className="flex flex-col items-center gap-6 bg-green-900/50 p-10 rounded-lg border-2 border-green-700/50 w-full max-w-2xl">
-              <div className="text-center">
-                <div className="text-sm text-gray-400 mb-2">Round Result:</div>
-                <div className={`text-4xl font-bold mb-4 ${isWin ? "text-green-400" : isPush ? "text-yellow-400" : "text-red-400"}`}>
-                  {renderResult(lastResult)}
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setPhase("WaitingForGame");
-                  setPlayerHand([]);
-                  setDealerHand([]);
-                  setLastResult(null);
-                }}
-                disabled={busy}
-                className="px-10 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-lg shadow-xl text-xl disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
-              >
-                {busy ? "⏳ Loading..." : "Play Next Round"}
-              </button>
-            </div>
-          )}
 
           {/* Dealer area */}
           <div className="w-full max-w-4xl bg-green-900/50 rounded-lg p-4 backdrop-blur-sm border border-green-700/50 shadow-xl">
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center justify-between w-full">
-                <h2 className="text-xl font-semibold">Dealer&apos;s Hand</h2>
+                <h2 className="text-xl font-semibold">Dealer's Hand</h2>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-green-400">
                     {dealerHand.length > 0 ? dealerValue : "-"}
@@ -495,17 +602,11 @@ export default function Blackjack() {
 
           {/* Action buttons */}
           <div className="flex flex-col items-center gap-3 my-2">
-            {roundOver && lastResult && (
-              <div className={`text-2xl font-bold px-6 py-3 rounded-lg ${resultClass}`}>
-                {renderResult(lastResult)}
-              </div>
-            )}
-
             {canPlay && (
               <div className="flex flex-col gap-3 items-center">
                 {busy && (
                   <div className="text-yellow-300 text-sm animate-pulse">
-                    ⏳ Processing on blockchain...
+                    ⏳ Processing...
                   </div>
                 )}
                 <div className="flex gap-4">
@@ -523,6 +624,16 @@ export default function Blackjack() {
                   >
                     {busy ? "⏳ Stand" : "Stand"}
                   </button>
+                  {playerHand.length === 2 && (
+                    <button
+                      onClick={onDoubleDown}
+                      disabled={busy || balance < lastBet}
+                      className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Double your bet, take one card, then stand"
+                    >
+                      {busy ? "⏳ Double" : `Double (${lastBet * 2})`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -557,6 +668,7 @@ export default function Blackjack() {
             </div>
           </div>
 
+
           {/* Game History Modal */}
           {showHistory && (
             <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -581,6 +693,7 @@ export default function Blackjack() {
                       const normalizedResult = normalizeResult(game.result);
                       const gameIsWin = normalizedResult === "PLAYER_BLACKJACK" || normalizedResult === "PLAYER_WIN" || normalizedResult === "DEALER_BUST";
                       const gameIsPush = normalizedResult === "PUSH";
+                      const gameNet = game.payout - game.bet;
 
                       return (
                         <div
@@ -602,9 +715,9 @@ export default function Blackjack() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm text-gray-400">Bet: {game.bet}</div>
-                              <div className={`text-lg font-bold ${game.payout > game.bet ? "text-green-400" : game.payout === game.bet ? "text-yellow-400" : "text-red-400"}`}>
-                                Payout: {game.payout}
+                              <div className="text-sm text-gray-400">Bet: {game.bet} → Payout: {game.payout}</div>
+                              <div className={`text-xl font-bold ${gameNet > 0 ? "text-green-400" : gameNet < 0 ? "text-red-400" : "text-yellow-400"}`}>
+                                {gameNet > 0 ? `+${gameNet}` : gameNet} chips
                               </div>
                             </div>
                           </div>
@@ -649,7 +762,7 @@ export default function Blackjack() {
             </div>
           )}
         </main>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

@@ -60,6 +60,9 @@ pub enum Operation {
     
     /// Stand - finish turn (sends result to Bank for verification)
     Stand,
+    
+    /// Double Down - double bet, take one card, then stand (only on first 2 cards)
+    DoubleDown,
 }
 
 // ============================================================================
@@ -115,6 +118,7 @@ pub enum Message {
         game_id: u64,
         result: GameResult,
         payout: u64,
+        dealer_hand: Vec<Card>, // Full dealer hand after hitting
     },
 }
 
@@ -133,6 +137,7 @@ pub enum GameType {
 pub enum GameAction {
     Hit,
     Stand,
+    DoubleDown,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
