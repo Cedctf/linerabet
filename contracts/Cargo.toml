@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Match your linera-sdk version
-linera-sdk = "0.15.4"
+linera-sdk = "0.15.8"
 linera-views = "0.15.4"
 linera-base = "0.15.4"
 
