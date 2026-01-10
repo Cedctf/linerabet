@@ -108,21 +108,116 @@ export default function Baccarat2Page() {
         }
     }, [isConnected, refresh]);
 
+    // Simulation Logic
+    const getRandomCard = (): Card => {
+        const suits = ["hearts", "diamonds", "clubs", "spades"];
+        const values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+        return {
+            suit: suits[Math.floor(Math.random() * suits.length)],
+            value: values[Math.floor(Math.random() * values.length)]
+        };
+    };
+
+    const calculateScore = (hand: Card[]): number => {
+        let score = 0;
+        hand.forEach(card => {
+            let val = 0;
+            if (["10", "J", "Q", "K"].includes(card.value)) val = 0;
+            else if (card.value === "A") val = 1;
+            else val = parseInt(card.value);
+            score += val;
+        });
+        return score % 10;
+    };
+
+    const simulateGame = () => {
+        // Initial Deal
+        const playerHand = [getRandomCard(), getRandomCard()];
+        const bankerHand = [getRandomCard(), getRandomCard()];
+
+        let playerScore = calculateScore(playerHand);
+        let bankerScore = calculateScore(bankerHand);
+        let isNatural = playerScore >= 8 || bankerScore >= 8;
+
+        if (!isNatural) {
+            // Player Draw Rule
+            if (playerScore <= 5) {
+                const thirdCard = getRandomCard();
+                playerHand.push(thirdCard);
+                playerScore = calculateScore(playerHand);
+
+                // Banker Draw Rule
+                let bankerDraws = false;
+                const thirdVal = calculateScore([thirdCard]); // Value of 3rd card
+
+                if (bankerScore <= 2) bankerDraws = true;
+                else if (bankerScore === 3 && thirdVal !== 8) bankerDraws = true;
+                else if (bankerScore === 4 && thirdVal >= 2 && thirdVal <= 7) bankerDraws = true;
+                else if (bankerScore === 5 && thirdVal >= 4 && thirdVal <= 7) bankerDraws = true;
+                else if (bankerScore === 6 && thirdVal >= 6 && thirdVal <= 7) bankerDraws = true;
+
+                if (bankerDraws) {
+                    bankerHand.push(getRandomCard());
+                    bankerScore = calculateScore(bankerHand);
+                }
+            } else if (bankerScore <= 5) {
+                // Player stood (6 or 7), Banker draws on 0-5
+                bankerHand.push(getRandomCard());
+                bankerScore = calculateScore(bankerHand);
+            }
+        }
+
+        // Determine Winner
+        let winner: BaccaratBetType = "TIE";
+        if (playerScore > bankerScore) winner = "PLAYER";
+        else if (bankerScore > playerScore) winner = "BANKER";
+
+        // Calculate Payout
+        let payout = 0;
+        if (winner === betType) {
+            if (betType === "PLAYER") payout = betAmount * 2;
+            else if (betType === "BANKER") payout = betAmount * 1.95;
+            else if (betType === "TIE") payout = betAmount * 9;
+        }
+
+        const outcome: BaccaratRecord = {
+            player_hand: playerHand,
+            banker_hand: bankerHand,
+            playerHand,
+            bankerHand,
+            bet: betAmount,
+            betType,
+            winner,
+            payout,
+            timestamp: Date.now(),
+            playerScore,
+            bankerScore,
+            isNatural
+        };
+
+        setLastOutcome(outcome);
+        setHistory(prev => [outcome, ...prev]);
+    };
+
     const placeBet = async () => {
         if (busy) return;
-        if (balance < betAmount) {
-            alert("Insufficient balance");
-            return;
-        }
+        // if (balance < betAmount) {
+        //     alert("Insufficient balance");
+        //     return;
+        // }
         setBusy(true);
         try {
+            // Simulate delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            simulateGame();
+
             // Mutation
             // Operation: PlayBaccarat { amount: u64, bet_type: BaccaratBetType }
-            const mutation = `mutation { playBaccarat(amount: ${betAmount}, betType: ${betType}) }`;
-            await lineraAdapter.mutate(mutation);
+            // const mutation = `mutation { playBaccarat(amount: ${betAmount}, betType: ${betType}) }`;
+            // await lineraAdapter.mutate(mutation);
 
-            await refreshData(); // Refresh balance
-            await refresh(); // Refresh game state
+            // await refreshData(); // Refresh balance
+            // await refresh(); // Refresh game state
         } catch (e: any) {
             console.error("Bet failed:", e);
             alert("Bet failed: " + e.message);
@@ -155,8 +250,8 @@ export default function Baccarat2Page() {
                     </h1>
                 </div>
 
-                {/* Chip Selection - Top */}
-                <div className="bg-black/40 p-4 rounded-xl border border-white/10 w-full max-w-2xl backdrop-blur-sm shadow-md mb-6 flex flex-col items-center shrink-0">
+                {/* Chip Selection - Bottom Center */}
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 p-4 rounded-xl border border-white/10 w-full max-w-xl backdrop-blur-sm shadow-md flex flex-col items-center z-50">
                     <h3 className="text-red-200 font-semibold uppercase tracking-wider text-xs mb-2">Select Chip Value</h3>
                     <div className="flex items-center gap-3 flex-wrap justify-center">
                         {allowedBets.map((chipValue) => (
@@ -175,76 +270,74 @@ export default function Baccarat2Page() {
                     </div>
                 </div>
 
+                {/* Bottom Right Controls - Vertical Stack */}
+                <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-50">
+                    <div className="text-xl font-mono text-yellow-400 font-bold bg-black/40 px-4 py-2 rounded-lg backdrop-blur-sm border border-yellow-500/30 mb-2">
+                        Bet: {betAmount} Chips
+                    </div>
+
+                    <button
+                        onClick={() => setBetType("PLAYER")}
+                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/40 border-blue-800 hover:bg-blue-900/60 backdrop-blur-md"}`}
+                    >
+                        BET PLAYER
+                    </button>
+                    <button
+                        onClick={() => setBetType("TIE")}
+                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/40 border-green-800 hover:bg-green-900/60 backdrop-blur-md"}`}
+                    >
+                        BET TIE
+                    </button>
+                    <button
+                        onClick={() => setBetType("BANKER")}
+                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/40 border-red-800 hover:bg-red-900/60 backdrop-blur-md"}`}
+                    >
+                        BET BANKER
+                    </button>
+
+                    <button
+                        onClick={placeBet}
+                        disabled={busy || !!lastOutcome}
+                        className="w-48 py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-2xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                    >
+                        {busy ? "..." : "DEAL"}
+                    </button>
+                </div>
+
                 {/* Game Area */}
-                <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 shrink-0">
+                <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-12 mb-4 shrink-0">
                     {/* Player Hand */}
-                    <div className="col-span-1 bg-blue-900/30 p-4 rounded-xl border-2 border-blue-500/30 flex flex-col items-center">
-                        <h2 className="text-xl font-bold text-blue-400 mb-2">PLAYER</h2>
-                        <div className="flex gap-2 min-h-[100px] items-center justify-center flex-wrap">
+                    <div className="col-span-1 bg-blue-900/20 p-6 rounded-2xl border-2 border-blue-500/30 flex flex-col items-center backdrop-blur-sm">
+                        <h2 className="text-2xl font-bold text-blue-400 mb-4 tracking-widest">PLAYER</h2>
+                        <div className="flex gap-4 min-h-[120px] items-center justify-center flex-wrap">
                             {lastOutcome ? (
                                 lastOutcome.playerHand.map((c, i) => (
-                                    <div key={i} className="transform hover:scale-105 transition-transform">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={60} height={84} />
+                                    <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-blue-300/50">Waiting...</div>
+                                <div className="text-blue-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-blue-500/30 rounded-lg w-20 h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
-                        {lastOutcome && <div className="text-3xl font-bold mt-2 text-white">{lastOutcome.playerScore}</div>}
-                    </div>
-
-                    {/* Betting Controls (Center) */}
-                    <div className="col-span-1 flex flex-col items-center justify-center gap-4">
-                        <div className="flex flex-col w-full gap-3">
-                            <button
-                                onClick={() => setBetType("PLAYER")}
-                                className={`p-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/20 border-blue-800 hover:bg-blue-900/40"}`}
-                            >
-                                BET PLAYER (1:1)
-                            </button>
-                            <button
-                                onClick={() => setBetType("TIE")}
-                                className={`p-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/20 border-green-800 hover:bg-green-900/40"}`}
-                            >
-                                BET TIE (8:1)
-                            </button>
-                            <button
-                                onClick={() => setBetType("BANKER")}
-                                className={`p-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/20 border-red-800 hover:bg-red-900/40"}`}
-                            >
-                                BET BANKER (0.95:1)
-                            </button>
-                        </div>
-
-                        <div className="text-lg font-mono text-yellow-400 mt-2">
-                            Bet: {betAmount} Chips
-                        </div>
-
-                        <button
-                            onClick={placeBet}
-                            disabled={busy || !!lastOutcome}
-                            className="w-full py-3 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {busy ? "DEALING..." : lastOutcome ? "Result Above" : "DEAL"}
-                        </button>
+                        {lastOutcome && <div className="text-5xl font-black mt-4 text-white drop-shadow-lg">{lastOutcome.playerScore}</div>}
                     </div>
 
                     {/* Banker Hand */}
-                    <div className="col-span-1 bg-red-900/30 p-4 rounded-xl border-2 border-red-500/30 flex flex-col items-center">
-                        <h2 className="text-xl font-bold text-red-400 mb-2">BANKER</h2>
-                        <div className="flex gap-2 min-h-[100px] items-center justify-center flex-wrap">
+                    <div className="col-span-1 bg-red-900/20 p-6 rounded-2xl border-2 border-red-500/30 flex flex-col items-center backdrop-blur-sm">
+                        <h2 className="text-2xl font-bold text-red-400 mb-4 tracking-widest">BANKER</h2>
+                        <div className="flex gap-4 min-h-[120px] items-center justify-center flex-wrap">
                             {lastOutcome ? (
                                 lastOutcome.bankerHand.map((c, i) => (
-                                    <div key={i} className="transform hover:scale-105 transition-transform">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={60} height={84} />
+                                    <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-red-300/50">Waiting...</div>
+                                <div className="text-red-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-red-500/30 rounded-lg w-20 h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
-                        {lastOutcome && <div className="text-3xl font-bold mt-2 text-white">{lastOutcome.bankerScore}</div>}
+                        {lastOutcome && <div className="text-5xl font-black mt-4 text-white drop-shadow-lg">{lastOutcome.bankerScore}</div>}
                     </div>
                 </div>
 
