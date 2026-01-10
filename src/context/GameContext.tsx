@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
-import { CONTRACTS_APP_ID } from '../constants';
+import { CONTRACTS_APP_ID, LINERA_RPC_URL } from '../constants';
 
 interface GameContextType {
     lineraData: { chainId: string; address: string; balance: string; gameBalance?: number } | null;
@@ -51,7 +51,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                 if (!lineraAdapter.isChainConnected()) {
                     try {
                         setIsConnecting(true);
-                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
+                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || LINERA_RPC_URL;
                         await lineraAdapter.connect(primaryWallet, faucetUrl);
 
                         // Set app ID once

@@ -80,6 +80,10 @@ impl Contract for ContractsContract {
             Operation::Stand => {
                 self.handle_stand(signer).await;
             }
+            
+            Operation::DoubleDown => {
+                self.handle_double_down(signer).await;
+            }
         }
     }
 
@@ -113,8 +117,8 @@ impl Contract for ContractsContract {
                 self.player_handle_game_ready(game_id, seed, bet).await;
             }
             
-            Message::GameSettled { game_id, result, payout } => {
-                self.player_handle_game_settled(game_id, result, payout).await;
+            Message::GameSettled { game_id, result, payout, dealer_hand } => {
+                self.player_handle_game_settled(game_id, result, payout, dealer_hand).await;
             }
         }
     }
@@ -157,7 +161,6 @@ impl ContractsContract {
                 player: signer,
                 player_chain,
             })
-            .with_authentication()
             .with_tracking()
             .send_to(bank_chain_id);
     }
@@ -186,7 +189,6 @@ impl ContractsContract {
                 game_type: GameType::Blackjack,
                 bet,
             })
-            .with_authentication()
             .with_tracking()
             .send_to(bank_chain_id);
     }
@@ -219,7 +221,6 @@ impl ContractsContract {
                     player,
                     actions: game.actions.clone(),
                 })
-                .with_authentication()
                 .with_tracking()
                 .send_to(bank_chain_id);
         } else {
@@ -247,7 +248,44 @@ impl ContractsContract {
                 player,
                 actions: game.actions.clone(),
             })
-            .with_authentication()
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+    
+    /// Player doubles down - double bet, draw one card, then stand
+    /// Only allowed on first 2 cards
+    async fn handle_double_down(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        assert!(game.player_hand.len() == 2, "Double down only allowed on first 2 cards");
+        
+        // Check if player has enough balance to double
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= game.bet, "Insufficient balance to double");
+        
+        // Deduct the additional bet
+        self.state.player_balance.set(balance - game.bet);
+        game.bet = game.bet * 2; // Double the bet
+        
+        // Draw exactly one card
+        let card = game.deck.pop().expect("Deck empty");
+        game.player_hand.push(card);
+        
+        game.actions.push(GameAction::DoubleDown);
+        game.phase = GamePhase::RoundComplete;
+        self.state.current_game.set(Some(game.clone()));
+        
+        // Send result to Bank for verification
+        let bank_chain_id = self.bank_chain_id();
+        let player = self.runtime.authenticated_signer().expect("Must be signed");
+        
+        self.runtime
+            .prepare_message(Message::ReportResult {
+                game_id: game.game_id,
+                player,
+                actions: game.actions.clone(),
+            })
             .with_tracking()
             .send_to(bank_chain_id);
     }
@@ -322,7 +360,7 @@ impl ContractsContract {
     }
     
     /// Player receives game result from Bank
-    async fn player_handle_game_settled(&mut self, game_id: u64, result: GameResult, payout: u64) {
+    async fn player_handle_game_settled(&mut self, game_id: u64, result: GameResult, payout: u64, dealer_hand: Vec<Card>) {
         // Credit payout to player
         let balance = *self.state.player_balance.get();
         self.state.player_balance.set(balance + payout);
@@ -331,11 +369,12 @@ impl ContractsContract {
         if let Some(game) = self.state.current_game.get().clone() {
             if game.game_id == game_id {
                 let now = self.runtime.system_time().micros();
+                
                 let record = GameRecord {
                     game_id,
                     game_type: game.game_type,
                     player_hand: game.player_hand.clone(),
-                    dealer_hand: game.dealer_hand.clone(),
+                    dealer_hand: dealer_hand, // Use full dealer hand from Bank
                     bet: game.bet,
                     result,
                     payout,
@@ -416,7 +455,7 @@ impl ContractsContract {
         assert!(pending.player == player, "Not your game");
         
         // Replay game deterministically
-        let (result, payout) = self.replay_and_verify(&pending, &actions);
+        let (result, payout, dealer_hand) = self.replay_and_verify(&pending, &actions);
         
         // Update house balance
         let house = *self.state.house_balance.get();
@@ -431,15 +470,15 @@ impl ContractsContract {
         // Remove pending game
         self.state.pending_games.remove(&game_id).expect("Failed to remove pending game");
         
-        // Send result to player
+        // Send result to player (including full dealer hand)
         self.runtime
-            .prepare_message(Message::GameSettled { game_id, result, payout })
+            .prepare_message(Message::GameSettled { game_id, result, payout, dealer_hand })
             .with_tracking()
             .send_to(pending.player_chain);
     }
     
-    /// Replay game with given seed and actions, return result and payout
-    fn replay_and_verify(&self, pending: &PendingGame, actions: &[GameAction]) -> (GameResult, u64) {
+    /// Replay game with given seed and actions, return result, payout, and dealer hand
+    fn replay_and_verify(&self, pending: &PendingGame, actions: &[GameAction]) -> (GameResult, u64, Vec<Card>) {
         // Recreate deck with same seed
         let mut deck = create_deck();
         shuffle(&mut deck, pending.seed);
@@ -454,6 +493,7 @@ impl ContractsContract {
         let mut dealer_hand = vec![dealer_up, dealer_hole];
         
         // Replay player actions
+        let mut doubled = false;
         for action in actions {
             match action {
                 GameAction::Hit => {
@@ -463,24 +503,34 @@ impl ContractsContract {
                 GameAction::Stand => {
                     break; // Stop drawing
                 }
+                GameAction::DoubleDown => {
+                    // Double down: draw one card, then stop
+                    let card = deck.pop().expect("Deck empty during replay");
+                    player_hand.push(card);
+                    doubled = true;
+                    break;
+                }
             }
         }
+        
+        // Adjust bet if doubled
+        let final_bet = if doubled { pending.bet * 2 } else { pending.bet };
         
         let player_value = calculate_hand_value(&player_hand);
         
         // Check player bust
         if player_value > 21 {
-            return (GameResult::PlayerBust, 0);
+            return (GameResult::PlayerBust, 0, dealer_hand);
         }
         
         // Check player blackjack
         if player_value == 21 && player_hand.len() == 2 {
             let dealer_value = calculate_hand_value(&dealer_hand);
             if dealer_value == 21 {
-                return (GameResult::Push, pending.bet); // Push
+                return (GameResult::Push, pending.bet, dealer_hand); // Push
             } else {
                 // Blackjack pays 3:2
-                return (GameResult::PlayerBlackjack, pending.bet * 5 / 2);
+                return (GameResult::PlayerBlackjack, pending.bet * 5 / 2, dealer_hand);
             }
         }
         
@@ -492,15 +542,15 @@ impl ContractsContract {
         
         let dealer_value = calculate_hand_value(&dealer_hand);
         
-        // Determine result
+        // Determine result (use final_bet for doubled bets)
         if dealer_value > 21 {
-            (GameResult::DealerBust, pending.bet * 2)
+            (GameResult::DealerBust, final_bet * 2, dealer_hand)
         } else if player_value > dealer_value {
-            (GameResult::PlayerWin, pending.bet * 2)
+            (GameResult::PlayerWin, final_bet * 2, dealer_hand)
         } else if dealer_value > player_value {
-            (GameResult::DealerWin, 0)
+            (GameResult::DealerWin, 0, dealer_hand)
         } else {
-            (GameResult::Push, pending.bet) // Push - return bet
+            (GameResult::Push, final_bet, dealer_hand) // Push - return bet
         }
     }
 }
