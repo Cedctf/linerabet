@@ -4,6 +4,7 @@ import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import CardComp from "../components/Card";
+import ConnectWallet from "../components/ConnectWallet";
 
 // Types
 type BaccaratBetType = "PLAYER" | "BANKER" | "TIE";
@@ -146,17 +147,22 @@ export default function Baccarat2Page() {
             <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
 
             <div className="relative z-10 flex flex-col items-center justify-start min-h-screen py-8 px-4 pt-28">
+                {/* Top Right Controls */}
+                <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
+                    <ConnectWallet />
+                    <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="px-4 py-2 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
+                    >
+                        📜 History ({history.length})
+                    </button>
+                </div>
+
                 {/* Header */}
                 <div className="relative w-full max-w-4xl mb-8 flex justify-center items-center">
                     <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
                         Baccarat 2
                     </h1>
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center gap-2"
-                    >
-                        📜 History ({history.length})
-                    </button>
                 </div>
 
                 {/* Chip Selection - Top */}
