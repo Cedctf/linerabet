@@ -29,12 +29,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         let gameBalance = 0;
         try {
-            const owner = lineraAdapter.identity();
-            const query = `query GetBalance($owner: AccountOwner!) { player(owner: $owner) { playerBalance } }`;
-            const data = await lineraAdapter.queryApplication<{ player: { playerBalance: number } | null }>(query, { owner });
-            if (data.player) {
-                gameBalance = data.player.playerBalance;
-            }
+            // New cross-chain API: playerBalance is a direct field, not nested under player(owner)
+            const query = `query { playerBalance }`;
+            const data = await lineraAdapter.queryApplication<{ playerBalance: number }>(query, {});
+            gameBalance = data.playerBalance || 0;
         } catch (e) {
             console.warn("Refreshed game balance failed:", e);
         }
