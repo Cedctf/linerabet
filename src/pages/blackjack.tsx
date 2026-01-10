@@ -113,12 +113,12 @@ export default function Blackjack() {
   const [dealerHand, setDealerHand] = useState<BlackjackCard[]>([]);
   const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);
 
-  // UI state
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [waitingForSeed, setWaitingForSeed] = useState(false);
   const [waitingForResult, setWaitingForResult] = useState(false);
+  const [lastShownGameId, setLastShownGameId] = useState<number | null>(null); // Track which result we've shown
 
   // Derived
   const canPlay = phase === "PlayerTurn";
@@ -187,15 +187,24 @@ export default function Blackjack() {
       if (data.currentGame) {
         const game = data.currentGame;
         setCurrentGameId(game.gameId);
-        setPhase(normalizePhase(game.phase));
+        const gamePhase = normalizePhase(game.phase);
+        setPhase(gamePhase);
         setPlayerHand(normalizeCards(game.playerHand));
         setDealerHand(normalizeCards(game.dealerHand));
         setWaitingForSeed(false);
+
+        // Check if game auto-completed (Blackjack on deal)
+        if (gamePhase === "RoundComplete" && !waitingForResult) {
+          // Game ended immediately (Blackjack) - start waiting for result
+          setWaitingForResult(true);
+        }
       } else {
         // No active game - check if we just finished one
-        if (waitingForResult && newHistory.length > 0) {
+        const latestGame = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
+        const isNewResult = latestGame && latestGame.gameId !== lastShownGameId;
+
+        if ((waitingForResult || waitingForSeed) && latestGame && isNewResult) {
           // Game ended! Get result from latest history
-          const latestGame = newHistory[newHistory.length - 1];
           setLastResult(latestGame.result);
           setLastPayout(latestGame.payout);
           setLastBet(latestGame.bet);
@@ -203,6 +212,8 @@ export default function Blackjack() {
           setDealerHand(normalizeCards(latestGame.dealerHand));
           setPhase("RoundComplete");
           setWaitingForResult(false);
+          setWaitingForSeed(false);
+          setLastShownGameId(latestGame.gameId); // Mark as shown
         } else if (!waitingForSeed && !waitingForResult && phase !== "RoundComplete") {
           // Only reset to WaitingForGame if not on RoundComplete
           // User must click "Play Again" to leave RoundComplete
@@ -451,6 +462,26 @@ export default function Blackjack() {
             </button>
           </div>
 
+          {/* Waiting for Seed Banner (after clicking Play) */}
+          {waitingForSeed && (
+            <div className="flex flex-col items-center gap-4 w-full max-w-2xl">
+              <div className="w-full rounded-xl p-6 text-center bg-yellow-500/20 text-yellow-400 border border-yellow-500">
+                <div className="text-3xl font-bold mb-2 animate-pulse">🎲 Starting Game...</div>
+                <div className="text-lg">Getting your cards from the dealer</div>
+              </div>
+            </div>
+          )}
+
+          {/* Waiting for Result Banner */}
+          {!waitingForSeed && (waitingForResult || (phase === "RoundComplete" && !lastResult)) && (
+            <div className="flex flex-col items-center gap-4 w-full max-w-2xl">
+              <div className="w-full rounded-xl p-6 text-center bg-yellow-500/20 text-yellow-400 border border-yellow-500">
+                <div className="text-3xl font-bold mb-2 animate-pulse">⏳ Calculating Result...</div>
+                <div className="text-lg">Please wait while we process your game</div>
+              </div>
+            </div>
+          )}
+
           {/* Round Complete - Result and Action Buttons */}
           {phase === "RoundComplete" && lastResult && (
             <div className="flex flex-col items-center gap-6 w-full max-w-2xl">
@@ -541,22 +572,6 @@ export default function Blackjack() {
                 >
                   {busy ? "⏳ Starting..." : `🎲 Play (Bet: ${bet})`}
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* Waiting for seed/result */}
-          {(waitingForSeed || waitingForResult) && phase !== "RoundComplete" && (
-            <div className="flex flex-col items-center gap-4 bg-green-900/50 p-10 rounded-lg border-2 border-green-700/50 w-full max-w-2xl">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-yellow-400 animate-pulse">
-                  ⏳ {waitingForSeed ? "Waiting for Bank..." : "Verifying result..."}
-                </div>
-                <div className="text-green-300 text-sm mt-2">
-                  {waitingForSeed
-                    ? "Cross-chain message sent. Getting game seed from Bank."
-                    : "Bank is verifying your game result..."}
-                </div>
               </div>
             </div>
           )}
