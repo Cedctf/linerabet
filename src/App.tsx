@@ -11,8 +11,8 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/games" element={<Games />} />
           <Route element={<Layout />}>
-            <Route path="/games" element={<Games />} />
             <Route path="/blackjack" element={<Blackjack />} />
             <Route path="/baccarat" element={<Baccarat />} />
             <Route path="/roulette" element={<Roulette />} />
