@@ -24,8 +24,8 @@
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
-    padding-top: 15vh;
-    gap: 8rem;
+    padding-top: 30vh;
+    gap: 12rem;
 }
 
 .home-title {
