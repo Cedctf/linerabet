@@ -12,10 +12,10 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/games" element={<Games />} />
+          <Route path="/baccarat2" element={<Baccarat2 />} />
           <Route element={<Layout />}>
             <Route path="/blackjack" element={<Blackjack />} />
             <Route path="/baccarat" element={<Baccarat />} />
-            <Route path="/baccarat2" element={<Baccarat2 />} />
             <Route path="/roulette" element={<Roulette />} />
           </Route>
         </Routes>
