@@ -322,7 +322,7 @@ export default function Blackjack2() {
                                         <img
                                             src={
                                                 lastResult === "PLAYER_BLACKJACK" || lastResult === "PLAYER_WIN" || lastResult === "DEALER_BUST"
-                                                    ? "/animations/win.gif"
+                                                    ? "/animations/win.png"
                                                     : "/animations/lose.png"
                                             }
                                             alt={lastResult === "PLAYER_BLACKJACK" || lastResult === "PLAYER_WIN" || lastResult === "DEALER_BUST" ? "You Win!" : "You Lose"}
