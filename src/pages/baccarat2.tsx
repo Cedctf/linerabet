@@ -229,7 +229,7 @@ export default function Baccarat2Page() {
     return (
         <div className="h-screen bg-black text-white overflow-hidden relative font-sans">
             {/* Background */}
-            <div className="absolute inset-0 bg-[url('/baccarat.jpg')] bg-cover bg-center" />
+            <div className="absolute inset-0 bg-[url('/baccarat-desk.png')] bg-cover bg-center" />
 
             <div className="relative z-10 flex flex-col items-center justify-center h-full py-4 px-4">
                 {/* Top Right Controls */}
