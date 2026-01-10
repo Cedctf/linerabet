@@ -15,7 +15,7 @@ export default function Home() {
   };
 
   const handleVideoEnd = () => {
-    navigate('/game');
+    navigate('/games');
   };
 
   return (
