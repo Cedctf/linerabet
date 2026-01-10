@@ -332,18 +332,38 @@ export default function Blackjack2() {
 
                             {/* Controls - Bottom Right Corner */}
                             {phase === "PlayerTurn" && (
-                                <div className="absolute bottom-4 right-4 flex flex-col gap-3">
+                                <div className="fixed bottom-4 right-4 flex flex-row gap-4 z-30">
                                     <button
                                         onClick={hit}
-                                        className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl rounded-xl shadow-lg hover:scale-105 transition-all"
+                                        className="group relative hover:scale-110 transition-transform"
+                                        style={{ width: '8vw', height: '18vh' }}
                                     >
-                                        Hit
+                                        <img
+                                            src="/buttons/hit.png"
+                                            alt="Hit"
+                                            className="w-full h-full object-contain group-hover:hidden"
+                                        />
+                                        <img
+                                            src="/animations/hit.gif"
+                                            alt="Hit"
+                                            className="w-full h-full object-contain hidden group-hover:block"
+                                        />
                                     </button>
                                     <button
                                         onClick={stand}
-                                        className="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xl rounded-xl shadow-lg hover:scale-105 transition-all"
+                                        className="group relative hover:scale-110 transition-transform"
+                                        style={{ width: '8vw', height: '18vh' }}
                                     >
-                                        Stand
+                                        <img
+                                            src="/buttons/stand.png"
+                                            alt="Stand"
+                                            className="w-full h-full object-contain group-hover:hidden"
+                                        />
+                                        <img
+                                            src="/animations/stand.gif"
+                                            alt="Stand"
+                                            className="w-full h-full object-contain hidden group-hover:block"
+                                        />
                                     </button>
                                 </div>
                             )}
