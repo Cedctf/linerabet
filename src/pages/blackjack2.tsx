@@ -249,13 +249,18 @@ export default function Blackjack2() {
                 {/* History Button - Bottom Left Corner (always visible) */}
                 <button
                     onClick={() => setShowHistory(!showHistory)}
-                    className="fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+                    className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
                     style={{ width: '8vw', height: '18vh' }}
                 >
                     <img
                         src="/buttons/history.png"
                         alt="History"
-                        className="w-full h-full object-contain"
+                        className="w-full h-full object-contain group-hover:hidden"
+                    />
+                    <img
+                        src="/animations/history.gif"
+                        alt="History"
+                        className="w-full h-full object-contain hidden group-hover:block"
                     />
                 </button>
 
