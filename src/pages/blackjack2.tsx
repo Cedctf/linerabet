@@ -244,13 +244,20 @@ export default function Blackjack2() {
                     <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
                         Balance: ${balance}
                     </div>
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="px-4 py-2 bg-blue-600/80 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg backdrop-blur-sm"
-                    >
-                        📜 History
-                    </button>
                 </div>
+
+                {/* History Button - Bottom Left Corner (always visible) */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+                    style={{ width: '8vw', height: '18vh' }}
+                >
+                    <img
+                        src="/buttons/history.png"
+                        alt="History"
+                        className="w-full h-full object-contain"
+                    />
+                </button>
 
                 {/* Main Game Area */}
                 <div className="flex-1 flex flex-col justify-between px-4 pb-4">
