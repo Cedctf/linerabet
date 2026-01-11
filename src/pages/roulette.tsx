@@ -8,7 +8,7 @@ import "../components/roulette/roulette.css";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
-import { BLACK_NUMBERS, calculatePayout, getChipClasses, WHEEL_NUMBERS } from "@/lib/roulette-utils";
+import { BLACK_NUMBERS, calculatePayout, WHEEL_NUMBERS } from "@/lib/roulette-utils";
 
 
 
@@ -270,13 +270,17 @@ const RoulettePage = () => {
                 <h3 className="text-green-200 font-semibold uppercase tracking-wider text-sm">Select Chip Value</h3>
                 <div className="flex gap-4 flex-wrap justify-center p-2">
                   {[1, 2, 3, 4, 5].map(val => (
-                    <div
+                    <button
                       key={val}
-                      className={getChipClasses(val, selectedChip)}
                       onClick={() => setSelectedChip(val)}
+                      className={`relative transition-all hover:scale-110 ${selectedChip === val ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
                     >
-                      {val}
-                    </div>
+                      <img
+                        src={`/Chips/chip${val}.png`}
+                        alt={`$${val} Chip`}
+                        className="w-16 h-16 object-contain"
+                      />
+                    </button>
                   ))}
                 </div>
               </div>
