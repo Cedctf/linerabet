@@ -13,7 +13,7 @@ import { BLACK_NUMBERS, calculatePayout, getChipClasses, WHEEL_NUMBERS } from "@
 
 
 const RoulettePage = () => {
-  const { lineraData, refreshData } = useGame();
+  const { lineraData, refreshData, setPendingBet } = useGame();
   // derived balance from context
   const serverBalance = lineraData?.gameBalance || 0;
   const isConnected = !!lineraData;
@@ -24,6 +24,7 @@ const RoulettePage = () => {
   const [winningNumber, setWinningNumber] = useState<any>({ next: null });
   const [history, setHistory] = useState<number[]>([]);
   const [lastWinAmount, setLastWinAmount] = useState(0);
+  const [debugMode, setDebugMode] = useState(false);
 
   const [busy, setBusy] = useState(false);
 
@@ -35,6 +36,12 @@ const RoulettePage = () => {
   // Available balance for new bets
   const availableBalance = serverBalance - currentTotalBet;
 
+  // Sync pendingBet with context for header display
+  useEffect(() => {
+    setPendingBet(currentTotalBet);
+    return () => setPendingBet(0); // Clear on unmount
+  }, [currentTotalBet, setPendingBet]);
+
   // Refresh history / sync
   const refresh = useCallback(async () => {
     if (!lineraAdapter.isChainConnected()) return;
@@ -45,26 +52,34 @@ const RoulettePage = () => {
         await lineraAdapter.setApplication(CONTRACTS_APP_ID);
       }
 
-      const owner = lineraAdapter.identity();
+
       const query = `
-                query GetRouletteState($owner: AccountOwner!) {
-                    player(owner: $owner) {
-                        lastRouletteOutcome
-                        rouletteHistory {
-                            winningNumber
-                            totalBet
-                            payout
-                            timestamp
+                query GetRouletteState {
+                    gameHistory {
+                        gameType
+                        result
+                        payout
+                        timestamp
+                        rouletteOutcome
+                        rouletteBets {
+                            amount
+                            betType
+                            number
                         }
                     }
                 }
             `;
       // NOTE: We rely on context for balance, but we fetch history here.
 
-      const data = await lineraAdapter.queryApplication<any>(query, { owner });
-      if (data.player) {
+      const data = await lineraAdapter.queryApplication<any>(query);
+      if (data.gameHistory) {
         // Update History
-        const serverHistory = data.player.rouletteHistory.map((r: any) => r.winningNumber).reverse().slice(0, 10);
+        const serverHistory = data.gameHistory
+          .filter((g: any) => g.gameType === "ROULETTE" && g.rouletteOutcome !== null)
+          .map((r: any) => r.rouletteOutcome)
+          .reverse()
+          .slice(0, 10);
+
         if (history.length === 0 && serverHistory.length > 0) {
           setHistory(serverHistory);
         }
@@ -118,9 +133,8 @@ const RoulettePage = () => {
 
     try {
       // Construct bets for GraphQL
-      // Contract Bet (Blackjack lib.rs): { betType: RouletteBetType, number: Option<u8>, amount: u64 }
-      // RouletteBetType: Number, Red, Black, Even, Odd, Low, High
-      const betsArg: { betType: string, number?: number, amount: number }[] = [];
+      // Contract Bet: { betType: RouletteBetType, number: Option<u8>, numbers: Option<Vec<u8>>, amount: u64 }
+      const betsArg: { betType: string, number?: number, numbers?: number[], amount: number }[] = [];
 
       for (const chip of placedChips.values()) {
         const { item, sum } = chip;
@@ -138,13 +152,34 @@ const RoulettePage = () => {
           betsArg.push({ betType: "LOW", amount: sum });
         } else if (item.type === ValueType.NUMBERS_19_36) {
           betsArg.push({ betType: "HIGH", amount: sum });
+        } else if (item.type === ValueType.NUMBERS_1_12) {
+          betsArg.push({ betType: "DOZEN1", amount: sum });
+        } else if (item.type === ValueType.NUMBERS_2_12) {
+          betsArg.push({ betType: "DOZEN2", amount: sum });
+        } else if (item.type === ValueType.NUMBERS_3_12) {
+          betsArg.push({ betType: "DOZEN3", amount: sum });
+        } else if (item.type === ValueType.DOUBLE_SPLIT) {
+          // Split bet - 2 numbers
+          betsArg.push({ betType: "SPLIT", numbers: item.valueSplit, amount: sum });
+        } else if (item.type === ValueType.TRIPLE_SPLIT) {
+          // Street bet - 3 numbers  
+          betsArg.push({ betType: "STREET", numbers: item.valueSplit, amount: sum });
+        } else if (item.type === ValueType.QUAD_SPLIT) {
+          // Corner bet - 4 numbers
+          betsArg.push({ betType: "CORNER", numbers: item.valueSplit, amount: sum });
+        } else if (item.type === ValueType.LINE_SPLIT) {
+          // Line bet - 6 numbers (2 rows)
+          betsArg.push({ betType: "LINE", numbers: item.valueSplit, amount: sum });
+        } else if (item.type === ValueType.BASKET) {
+          // Basket / First Four - 0, 1, 2, 3
+          betsArg.push({ betType: "BASKET", amount: sum });
         } else {
-          console.warn("Skipping unsupported bet type:", item.type);
+          console.warn("Skipping unknown bet type:", item.type);
         }
       }
 
       if (betsArg.length === 0) {
-        alert("Only currently supported bet types (Number, Color, Even/Odd, Low/High) will be processed.");
+        alert("No bets placed. Please place at least one bet.");
         setBusy(false);
         setStage(GameStages.PLACE_BET);
         return;
@@ -152,21 +187,49 @@ const RoulettePage = () => {
 
       // Construct query string manually to ensure enum formatting
       const betsString = betsArg.map(b => {
-        // For Number, we include `number: X`. For others, number is omitted (null/None)
-        return `{ betType: ${b.betType}, amount: ${b.amount}${b.number !== undefined ? `, number: ${b.number}` : ""} }`;
+        let parts = [`betType: ${b.betType}`, `amount: ${b.amount}`];
+        if (b.number !== undefined) {
+          parts.push(`number: ${b.number}`);
+        }
+        if (b.numbers !== undefined) {
+          parts.push(`numbers: [${b.numbers.join(", ")}]`);
+        }
+        return `{ ${parts.join(", ")} }`;
       }).join(", ");
 
-      const mutation = `mutation { spinRoulette(bets: [${betsString}]) }`;
+      // Fetch initial history count
+      const initialQuery = `query { gameHistory { gameType } }`;
+      const initialData = await lineraAdapter.queryApplication<any>(initialQuery);
+      const initialCount = initialData.gameHistory
+        ? initialData.gameHistory.filter((g: any) => g.gameType === "ROULETTE").length
+        : 0;
+
+      const mutation = `mutation { playRoulette(bets: [${betsString}]) }`;
       await lineraAdapter.mutate(mutation);
 
-      // Fetch result
-      const owner = lineraAdapter.identity();
-      const query = `query { player(owner: "${owner}") { lastRouletteOutcome playerBalance } }`;
-      const data = await lineraAdapter.queryApplication<any>(query);
-      const winningNum = data.player.lastRouletteOutcome;
+      // Poll for result
+      let winningNum: number | null = null;
+      let retries = 0;
+
+      while (retries < 40) { // Poll for ~20 seconds (500ms * 40)
+        const query = `query { gameHistory { gameType rouletteOutcome } }`;
+        const data = await lineraAdapter.queryApplication<any>(query);
+        const history = data.gameHistory.filter((g: any) => g.gameType === "ROULETTE");
+
+        if (history.length > initialCount) {
+          const lastGame = history[history.length - 1];
+          if (lastGame.rouletteOutcome !== null && lastGame.rouletteOutcome !== undefined) {
+            winningNum = lastGame.rouletteOutcome;
+            break;
+          }
+        }
+
+        await new Promise(r => setTimeout(r, 500));
+        retries++;
+      }
 
       if (winningNum === null || winningNum === undefined) {
-        throw new Error("No outcome returned");
+        throw new Error("Game timed out waiting for Bank result. Please check history later.");
       }
 
       // Refresh Global Balance
@@ -205,7 +268,12 @@ const RoulettePage = () => {
     }
 
     setHistory(prev => [number, ...prev.slice(0, 9)]);
-    // Balance is updated via context refreshData() called in spin()
+
+    // Refresh balance after animation - settlement should be complete by now
+    setTimeout(async () => {
+      await refreshData();
+    }, 500);
+
     setStage(GameStages.WINNERS);
     setBusy(false);
   };
@@ -299,15 +367,62 @@ const RoulettePage = () => {
               </div>
             </div>
 
-            <div className="transform origin-top scale-[0.6] md:scale-[0.75] lg:scale-[0.85] p-4 bg-black/20 rounded-xl border border-white/5">
+            <div className={`transform origin-top scale-[0.6] md:scale-[0.75] lg:scale-[0.85] p-4 bg-black/20 rounded-xl border border-white/5 ${debugMode ? 'debug-mode' : ''}`}>
               <Board
                 onCellClick={onCellClick}
                 chipsData={{ selectedChip, placedChips }}
                 rouletteData={rouletteData}
               />
             </div>
+
+            {/* Debug Mode Toggle */}
+            <button
+              onClick={() => setDebugMode(!debugMode)}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg shadow transition-all ${debugMode ? 'bg-lime-500 text-black' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              🔧 Debug: {debugMode ? 'ON' : 'OFF'}
+            </button>
           </div>
         </div>
+
+        {/* Debug Legend */}
+        {debugMode && (
+          <div className="debug-legend">
+            <div className="font-bold mb-2 text-lime-400">Bet Position Legend:</div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-dot" style={{ background: 'lime' }}></div>
+              <span>Number (35:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-line" style={{ background: 'cyan' }}></div>
+              <span>Split - 2 nums (17:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-line" style={{ background: 'yellow' }}></div>
+              <span>Street - 3 nums (11:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-square" style={{ background: 'magenta' }}></div>
+              <span>Corner - 4 nums (8:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-rect" style={{ background: 'orange' }}></div>
+              <span>Dozen (2:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-rect" style={{ background: '#3b82f6' }}></div>
+              <span>Even Money (1:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-dot" style={{ background: '#ef4444', border: '2px solid white' }}></div>
+              <span>Red (1:1)</span>
+            </div>
+            <div className="debug-legend-item">
+              <div className="debug-legend-dot" style={{ background: '#1f2937', border: '2px solid white' }}></div>
+              <span>Black (1:1)</span>
+            </div>
+          </div>
+        )}
 
         {showHistory && (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
