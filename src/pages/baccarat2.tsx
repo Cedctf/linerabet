@@ -198,7 +198,7 @@ export default function Baccarat2Page() {
 
         setLastOutcome(outcome);
         setHistory(prev => [outcome, ...prev]);
-        
+
         // Delay popup to let user see result
         setTimeout(() => {
             setShowPopup(true);
@@ -281,25 +281,25 @@ export default function Baccarat2Page() {
                             </div>
                         </div>
 
-                        {/* Betting Buttons - Reverted to Text */}
-                        <div className="flex flex-row gap-3 w-full justify-center">
+                        {/* Betting Buttons - Images */}
+                        <div className="flex flex-row gap-3 w-full justify-center items-center">
                             <button
                                 onClick={() => setBetType("PLAYER")}
-                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/40 border-blue-800 hover:bg-blue-900/60 backdrop-blur-md"}`}
+                                className={`transition-all hover:scale-105 ${betType === "PLAYER" ? "scale-110 drop-shadow-[0_0_15px_rgba(37,99,235,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET PLAYER
+                                <img src="/buttons/player.png" alt="Bet Player" className="w-32 object-contain" />
                             </button>
                             <button
                                 onClick={() => setBetType("TIE")}
-                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/40 border-green-800 hover:bg-green-900/60 backdrop-blur-md"}`}
+                                className={`transition-all hover:scale-105 ${betType === "TIE" ? "scale-110 drop-shadow-[0_0_15px_rgba(22,163,74,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET TIE
+                                <img src="/buttons/tie.png" alt="Bet Tie" className="w-32 object-contain" />
                             </button>
                             <button
                                 onClick={() => setBetType("BANKER")}
-                                className={`w-32 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/40 border-red-800 hover:bg-red-900/60 backdrop-blur-md"}`}
+                                className={`transition-all hover:scale-105 ${betType === "BANKER" ? "scale-110 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET BANKER
+                                <img src="/buttons/banker.png" alt="Bet Banker" className="w-32 object-contain" />
                             </button>
                         </div>
 
