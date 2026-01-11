@@ -233,21 +233,37 @@ const RoulettePage = () => {
       <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
 
+      {/* History Button - Bottom Left Corner (always visible) */}
+      <button
+        onClick={() => setShowHistory(!showHistory)}
+        className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+        style={{ width: '8vw', height: '18vh' }}
+      >
+        <img
+          src="/buttons/history.png"
+          alt="History"
+          className="w-full h-full object-contain group-hover:hidden"
+        />
+        <img
+          src="/animations/history.gif"
+          alt="History"
+          className="w-full h-full object-contain hidden group-hover:block"
+        />
+      </button>
+
       <div className="relative z-10 flex flex-col items-center justify-start min-h-screen py-8 px-4 pt-28 overflow-y-auto">
+        {/* Header - Top bar */}
+        <div className="absolute top-0 left-0 w-full flex justify-between items-center p-4 z-50">
+          <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
+            Balance: ${serverBalance}
+          </div>
+        </div>
 
         <div className="relative w-full max-w-6xl mb-8 flex justify-center items-center">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
             Roulette
           </h1>
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex gap-4">
 
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center gap-2"
-            >
-              📜 History ({history.length})
-            </button>
-          </div>
         </div>
 
         <div className="flex flex-col xl:flex-row gap-8 items-start justify-center w-full max-w-7xl">
