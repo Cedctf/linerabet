@@ -5,6 +5,7 @@ import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import CardComp from "../components/Card";
 import ConnectWallet from "../components/ConnectWallet";
+import Header from "../components/Header";
 
 // Types
 type BaccaratBetType = "PLAYER" | "BANKER" | "TIE";
@@ -238,12 +239,7 @@ export default function Baccarat2Page() {
             <div className="absolute inset-0 bg-[url('/baccarat-desk.png')] bg-cover bg-center" />
 
             <div className="relative z-10 flex flex-col items-center justify-center h-full py-4 px-4">
-                {/* Header - Top bar */}
-                <div className="absolute top-0 left-0 w-full flex justify-between items-center p-4 z-50">
-                    <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
-                        Balance: ${balance}
-                    </div>
-                </div>
+                <Header />
 
                 {/* History Button - Bottom Left Corner (always visible) */}
                 <button
