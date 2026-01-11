@@ -259,12 +259,7 @@ const RoulettePage = () => {
           </div>
         </div>
 
-        <div className="relative w-full max-w-6xl mb-8 flex justify-center items-center">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
-            Roulette
-          </h1>
 
-        </div>
 
         <div className="flex flex-col xl:flex-row gap-8 items-start justify-center w-full max-w-7xl">
 
