@@ -238,16 +238,30 @@ export default function Baccarat2Page() {
             <div className="absolute inset-0 bg-[url('/baccarat-desk.png')] bg-cover bg-center" />
 
             <div className="relative z-10 flex flex-col items-center justify-center h-full py-4 px-4">
-                {/* Top Right Controls */}
-                <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
-                    <ConnectWallet />
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="px-4 py-2 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
-                    >
-                        📜 History ({history.length})
-                    </button>
+                {/* Header - Top bar */}
+                <div className="absolute top-0 left-0 w-full flex justify-between items-center p-4 z-50">
+                    <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
+                        Balance: ${balance}
+                    </div>
                 </div>
+
+                {/* History Button - Bottom Left Corner (always visible) */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+                    style={{ width: '8vw', height: '18vh' }}
+                >
+                    <img
+                        src="/buttons/history.png"
+                        alt="History"
+                        className="w-full h-full object-contain group-hover:hidden"
+                    />
+                    <img
+                        src="/animations/history.gif"
+                        alt="History"
+                        className="w-full h-full object-contain hidden group-hover:block"
+                    />
+                </button>
 
                 {/* Header Removed */}
 
