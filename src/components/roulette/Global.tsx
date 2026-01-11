@@ -13,7 +13,9 @@ export const ValueType = {
     DOUBLE_SPLIT: 10,
     QUAD_SPLIT: 11,
     TRIPLE_SPLIT: 12,
-    EMPTY: 13
+    EMPTY: 13,
+    LINE_SPLIT: 14,      // 6 numbers (2 rows)
+    BASKET: 15           // First Four: 0, 1, 2, 3
 } as const;
 
 export type ValueType = typeof ValueType[keyof typeof ValueType];
