@@ -54,6 +54,7 @@ export default function Baccarat2Page() {
     const [lastOutcome, setLastOutcome] = useState<BaccaratRecord | null>(null);
     const [history, setHistory] = useState<BaccaratRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [showPopup, setShowPopup] = useState(false);
 
     const allowedBets = [1, 2, 3, 4, 5];
 
@@ -197,6 +198,11 @@ export default function Baccarat2Page() {
 
         setLastOutcome(outcome);
         setHistory(prev => [outcome, ...prev]);
+        
+        // Delay popup to let user see result
+        setTimeout(() => {
+            setShowPopup(true);
+        }, 2000);
     };
 
     const placeBet = async () => {
@@ -346,29 +352,36 @@ export default function Baccarat2Page() {
                 </div>
 
                 {/* Outcome Message & Controls - Absolute Positioned above Chip Selection */}
-                {lastOutcome && (
-                    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 mb-4 w-full max-w-lg mx-auto bg-green-900/90 p-4 rounded-xl border border-green-500/30 backdrop-blur-md z-[60] shadow-2xl">
-                        <div className="text-center animate-bounce">
-                            <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 drop-shadow-sm uppercase">
-                                {lastOutcome.winner} WINS
-                            </div>
-                            {lastOutcome.payout > 0 ? (
-                                <div className="text-xl text-green-400 font-bold mt-1">
-                                    You Won {lastOutcome.payout} Chips!
-                                </div>
-                            ) : (
-                                <div className="text-xl text-red-400 font-bold mt-1">
-                                    You Lost {lastOutcome.bet} Chips
-                                </div>
-                            )}
+                {/* Result Popup with Try Again - Center */}
+                {showPopup && lastOutcome && (
+                    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+                        <div className="relative">
+                            {/* Win/Lose Image */}
+                            <img
+                                src={
+                                    lastOutcome.payout > 0
+                                        ? "/animations/win.png"
+                                        : "/animations/lose.png"
+                                }
+                                alt={lastOutcome.payout > 0 ? "You Win!" : "You Lose"}
+                                className="max-w-[50vw] max-h-[60vh] object-contain"
+                            />
+                            {/* Try Again Button - Overlaid at bottom of image */}
+                            <button
+                                onClick={() => {
+                                    setShowPopup(false);
+                                    setLastOutcome(null);
+                                }}
+                                className="absolute bottom-[5%] left-1/2 -translate-x-1/2 hover:scale-110 transition-transform"
+                                style={{ width: '15vw', height: '12vh' }}
+                            >
+                                <img
+                                    src="/buttons/try-again.png"
+                                    alt="Play Again"
+                                    className="w-full h-full object-contain"
+                                />
+                            </button>
                         </div>
-
-                        <button
-                            onClick={() => setLastOutcome(null)}
-                            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-lg shadow-lg text-lg transform hover:scale-105 transition-all w-full"
-                        >
-                            Play Again
-                        </button>
                     </div>
                 )}
             </div>
