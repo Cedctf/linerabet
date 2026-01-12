@@ -63,6 +63,12 @@ pub enum Operation {
     
     /// Double Down - double bet, take one card, then stand (only on first 2 cards)
     DoubleDown,
+
+    /// Play Roulette with a list of bets
+    PlayRoulette { bets: Vec<RouletteBet> },
+
+    /// Report Roulette result for Bank verification
+    ReportRouletteResult { game_id: u64, claimed_outcome: u8 },
 }
 
 // ============================================================================
@@ -95,6 +101,19 @@ pub enum Message {
         player: AccountOwner,
         actions: Vec<GameAction>,
     },
+
+    /// Request a Roulette game (player sends bets, bank returns seed)
+    RequestRouletteGame {
+        player: AccountOwner,
+        player_chain: ChainId,
+        bets: Vec<RouletteBet>,
+    },
+
+    /// Report roulette result for verification (bank uses stored data for player info)
+    ReportRouletteResult {
+        game_id: u64,
+        claimed_outcome: u8,
+    },
     
     // ─────────────────────────────────────────────────────────────────────────
     // Bank → Player
@@ -119,6 +138,21 @@ pub enum Message {
         result: GameResult,
         payout: u64,
         dealer_hand: Vec<Card>, // Full dealer hand after hitting
+    },
+
+    /// Roulette game ready - here's your seed
+    RouletteGameReady {
+        game_id: u64,
+        seed: u64,
+        bets: Vec<RouletteBet>,
+    },
+
+    /// Roulette game settled after verification
+    RouletteSettled {
+        game_id: u64,
+        outcome: u8,
+        payout: u64,
+        bets: Vec<RouletteBet>,
     },
 }
 
@@ -186,17 +220,29 @@ pub enum BaccaratBetType {
 #[derive(Clone, Debug, Deserialize, Serialize, InputObject)]
 pub struct RouletteBet {
     pub bet_type: RouletteBetType,
-    pub number: Option<u8>,
+    pub number: Option<u8>,           // For single number bets
+    pub numbers: Option<Vec<u8>>,     // For split/street/corner bets
     pub amount: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
 pub enum RouletteBetType {
-    Number,
-    Red,
-    Black,
-    Even,
-    Odd,
-    Low,
-    High,
+    Number,      // Single number (35:1)
+    Split,       // 2 adjacent numbers (17:1)
+    Street,      // 3 numbers in a row (11:1)
+    Corner,      // 4 numbers (8:1)
+    Line,        // 6 numbers (2 rows) (5:1)
+    Basket,      // First Four: 0, 1, 2, 3 (6:1)
+    Red,         // Red numbers (1:1)
+    Black,       // Black numbers (1:1)
+    Even,        // Even numbers (1:1)
+    Odd,         // Odd numbers (1:1)
+    Low,         // 1-18 (1:1)
+    High,        // 19-36 (1:1)
+    Dozen1,      // 1-12 (2:1)
+    Dozen2,      // 13-24 (2:1)
+    Dozen3,      // 25-36 (2:1)
+    Column1,     // Column 1 (3,6,9...) (2:1)
+    Column2,     // Column 2 (2,5,8...) (2:1)
+    Column3,     // Column 3 (1,4,7...) (2:1)
 }

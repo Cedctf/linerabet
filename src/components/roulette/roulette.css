@@ -73,7 +73,7 @@
 }
 
 .roulette-wheel circle {
-  cursor: pointer;
+  cursor: default;
   fill: transparent;
 }
 
@@ -153,7 +153,7 @@
   font-size: 18px;
   color: #ffff;
   transition: .5s;
-  cursor: pointer;
+  cursor: default;
 }
 
 .roulette-game-container ul li.board-chip div::before {
@@ -171,17 +171,7 @@
   opacity: 0;
 }
 
-.roulette-game-container ul li.board-chip div:hover::before {
-  transform: scale(1.1);
-  box-shadow: 0 0 15px #ffee10;
-  opacity: 1;
-}
-
-.roulette-game-container ul li.board-chip div:hover {
-  color: #ffee10;
-  box-shadow: 0 0 5px #ffee10;
-  text-shadow: 0 0 5px #ffee10;
-}
+/* Hover effect removed */
 
 .roulette-game-container ul li.board-chip div.chip_selected {
   color: #ffee10;
@@ -347,9 +337,8 @@ div.chip-5-placed {
   margin-bottom: 10px;
 }
 
-.board-cell-number:hover {
-  opacity: 0.7;
-  cursor: pointer;
+.board-cell-number {
+  cursor: default;
 }
 
 /* DEBUG MODE - Shows all clickable bet positions */
@@ -677,37 +666,14 @@ div.chip-5-placed {
 }
 
 /* Hover states for debug mode */
-.debug-mode .board-cell-number:hover::after {
-  background: white;
-  width: 12px;
-  height: 12px;
-  box-shadow: 0 0 8px white;
-}
+/* Debug hover effects removed */
 
 /* Keep purple 2:1 dots stable (don't change on hover) */
-.debug-mode tr:nth-child(1) td:nth-child(24):hover::before,
-.debug-mode tr:nth-child(3) td:nth-child(24):hover::before,
-.debug-mode tr:nth-child(5) td:nth-child(24):hover::before {
-  background: #a855f7 !important;
-  /* Keep purple */
-  box-shadow: none !important;
-}
+/* Debug hover effects removed */
 
-.debug-mode .board-cell-double-split:hover::after,
-.debug-mode .board-cell-triple-split:hover::after,
-.debug-mode .board-cell-quad-split:hover::after {
-  background: white;
-  box-shadow: 0 0 8px white;
-}
+/* Debug hover effects removed */
 
-.debug-mode td[class*="board-cell-number-"]:not(.board-cell-number):hover::after,
-.debug-mode td.board-cell-even:not(.board-cell-number):hover::after,
-.debug-mode td.board-cell-odd:not(.board-cell-number):hover::after,
-.debug-mode td.board-cell-red:not(.board-cell-number):hover::after,
-.debug-mode td.board-cell-black:not(.board-cell-number):hover::after {
-  box-shadow: 0 0 12px white;
-  transform: translate(-50%, -50%) scale(1.2);
-}
+/* Debug hover effects removed */
 
 /* Legend for debug mode */
 .debug-legend {

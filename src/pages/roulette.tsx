@@ -1,14 +1,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Wheel from "../components/roulette/Wheel";
-import Board from "../components/roulette/Board";
-import { GameStages, ValueType } from "../components/roulette/Global";
-import type { Item, PlacedChip } from "../components/roulette/Global";
+import { GameStages } from "../components/roulette/Global";
 import "../components/roulette/roulette.css";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
-import { BLACK_NUMBERS, calculatePayout, getChipClasses, WHEEL_NUMBERS } from "@/lib/roulette-utils";
+import { BLACK_NUMBERS, WHEEL_NUMBERS } from "@/lib/roulette-utils";
+import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout } from "../components/roulette-blueprint";
+import type { BetPayload } from "../components/roulette-blueprint";
 
 
 
@@ -18,29 +18,38 @@ const RoulettePage = () => {
   const serverBalance = lineraData?.gameBalance || 0;
   const isConnected = !!lineraData;
 
-  const [selectedChip, setSelectedChip] = useState<number | null>(1);
-  const [placedChips, setPlacedChips] = useState<Map<Item, PlacedChip>>(new Map());
+  const [selectedChip, setSelectedChip] = useState<number>(1);
+  // NEW: Map of hotspot ID -> bet amount (replaces old placedChips)
+  const [placedBets, setPlacedBets] = useState<Map<string, number>>(new Map());
   const [stage, setStage] = useState<GameStages>(GameStages.PLACE_BET);
   const [winningNumber, setWinningNumber] = useState<any>({ next: null });
   const [history, setHistory] = useState<number[]>([]);
   const [lastWinAmount, setLastWinAmount] = useState(0);
-  const [debugMode, setDebugMode] = useState(false);
 
   const [busy, setBusy] = useState(false);
 
   const rouletteData = { numbers: WHEEL_NUMBERS };
 
-  // Calculate total currently placed bets
-  const currentTotalBet = Array.from(placedChips.values()).reduce((acc, chip) => acc + chip.sum, 0);
+  // Calculate total currently placed bets (from new placedBets map)
+  const currentTotalBet = Array.from(placedBets.values()).reduce((acc, amount) => acc + amount, 0);
 
   // Available balance for new bets
   const availableBalance = serverBalance - currentTotalBet;
 
-  // Sync pendingBet with context for header display
+  // Sync pendingBet with context for header display - only during betting phase
   useEffect(() => {
-    setPendingBet(currentTotalBet);
-    return () => setPendingBet(0); // Clear on unmount
-  }, [currentTotalBet, setPendingBet]);
+    // Only sync pending bet when user is placing bets (before spin)
+    // pendingBet is cleared explicitly after mutation completes in spin()
+    if (stage === GameStages.PLACE_BET) {
+      setPendingBet(currentTotalBet);
+    }
+    // NO cleanup here - pendingBet is cleared explicitly in spin() after mutation
+  }, [currentTotalBet, stage, setPendingBet]);
+
+  // Clear pendingBet on unmount only
+  useEffect(() => {
+    return () => setPendingBet(0);
+  }, [setPendingBet]);
 
   // Refresh history / sync
   const refresh = useCallback(async () => {
@@ -97,85 +106,102 @@ const RoulettePage = () => {
   }, [refresh, refreshData]);
 
 
-  const onCellClick = (item: Item) => {
+  // NEW: Handle clicks from the roulette board blueprint
+  const handleBetSelected = (betId: string, payload: BetPayload) => {
     if (stage !== GameStages.PLACE_BET || busy) return;
 
-    const currentChipValue = selectedChip;
-    if (currentChipValue === null) return;
-
-    // Check against dynamic available balance
-    if (availableBalance < currentChipValue) {
+    // Check against available balance (skip if no wallet connected for testing)
+    if (isConnected && availableBalance < selectedChip) {
       alert("Insufficient balance! Please buy more chips.");
       return;
     }
 
-    const newPlacedChips = new Map(placedChips);
-    const existingChip = newPlacedChips.get(item);
+    // Add bet to placedBets map
+    const newPlacedBets = new Map(placedBets);
+    const existingAmount = newPlacedBets.get(betId) || 0;
+    newPlacedBets.set(betId, existingAmount + selectedChip);
+    setPlacedBets(newPlacedBets);
 
-    if (existingChip) {
-      newPlacedChips.set(item, { ...existingChip, sum: existingChip.sum + currentChipValue });
-    } else {
-      newPlacedChips.set(item, { item, sum: currentChipValue });
-    }
-
-    setPlacedChips(newPlacedChips);
-    // Visual deduction is handled automatically by 'availableBalance' derived variable
+    console.log(`Bet placed: ${payload.label} ($${selectedChip}) - Payout: ${payload.payout}:1`);
   };
 
   const clearBet = () => {
     if (stage !== GameStages.PLACE_BET) return;
-    setPlacedChips(new Map());
+    setPlacedBets(new Map());
   };
 
   const spin = async () => {
     setBusy(true);
     setStage(GameStages.NO_MORE_BETS);
+    // Keep pendingBet during spin - will be cleared after mutation confirms
 
     try {
-      // Construct bets for GraphQL
-      // Contract Bet: { betType: RouletteBetType, number: Option<u8>, numbers: Option<Vec<u8>>, amount: u64 }
+      // Construct bets from placedBets map using BET_REGISTRY
       const betsArg: { betType: string, number?: number, numbers?: number[], amount: number }[] = [];
 
-      for (const chip of placedChips.values()) {
-        const { item, sum } = chip;
-        if (item.type === ValueType.NUMBER) {
-          betsArg.push({ betType: "NUMBER", number: item.value, amount: sum });
-        } else if (item.type === ValueType.RED) {
-          betsArg.push({ betType: "RED", amount: sum });
-        } else if (item.type === ValueType.BLACK) {
-          betsArg.push({ betType: "BLACK", amount: sum });
-        } else if (item.type === ValueType.EVEN) {
-          betsArg.push({ betType: "EVEN", amount: sum });
-        } else if (item.type === ValueType.ODD) {
-          betsArg.push({ betType: "ODD", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_1_18) {
-          betsArg.push({ betType: "LOW", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_19_36) {
-          betsArg.push({ betType: "HIGH", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_1_12) {
-          betsArg.push({ betType: "DOZEN1", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_2_12) {
-          betsArg.push({ betType: "DOZEN2", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_3_12) {
-          betsArg.push({ betType: "DOZEN3", amount: sum });
-        } else if (item.type === ValueType.DOUBLE_SPLIT) {
-          // Split bet - 2 numbers
-          betsArg.push({ betType: "SPLIT", numbers: item.valueSplit, amount: sum });
-        } else if (item.type === ValueType.TRIPLE_SPLIT) {
-          // Street bet - 3 numbers  
-          betsArg.push({ betType: "STREET", numbers: item.valueSplit, amount: sum });
-        } else if (item.type === ValueType.QUAD_SPLIT) {
-          // Corner bet - 4 numbers
-          betsArg.push({ betType: "CORNER", numbers: item.valueSplit, amount: sum });
-        } else if (item.type === ValueType.LINE_SPLIT) {
-          // Line bet - 6 numbers (2 rows)
-          betsArg.push({ betType: "LINE", numbers: item.valueSplit, amount: sum });
-        } else if (item.type === ValueType.BASKET) {
-          // Basket / First Four - 0, 1, 2, 3
-          betsArg.push({ betType: "BASKET", amount: sum });
-        } else {
-          console.warn("Skipping unknown bet type:", item.type);
+      for (const [betId, amount] of placedBets.entries()) {
+        const config = BET_REGISTRY[betId];
+        if (!config) continue;
+
+        // Determine the correct contract bet type based on betId and config.type
+        let contractBetType: string;
+
+        switch (config.type) {
+          case 'straight':
+            contractBetType = 'NUMBER';
+            break;
+          case 'split':
+            contractBetType = 'SPLIT';
+            break;
+          case 'street':
+            contractBetType = 'STREET';
+            break;
+          case 'corner':
+            contractBetType = 'CORNER';
+            break;
+          case 'sixline':
+            contractBetType = 'LINE';
+            break;
+          case 'dozen':
+            // Map dozen_1, dozen_2, dozen_3 to DOZEN1, DOZEN2, DOZEN3
+            if (betId === 'dozen_1') contractBetType = 'DOZEN1';
+            else if (betId === 'dozen_2') contractBetType = 'DOZEN2';
+            else contractBetType = 'DOZEN3';
+            break;
+          case 'column':
+            // Map column_1, column_2, column_3 to COLUMN1, COLUMN2, COLUMN3
+            if (betId === 'column_1') contractBetType = 'COLUMN1';
+            else if (betId === 'column_2') contractBetType = 'COLUMN2';
+            else contractBetType = 'COLUMN3';
+            break;
+          case 'even_money':
+            // Map specific even money bets to contract types
+            if (betId === 'red') contractBetType = 'RED';
+            else if (betId === 'black') contractBetType = 'BLACK';
+            else if (betId === 'even') contractBetType = 'EVEN';
+            else if (betId === 'odd') contractBetType = 'ODD';
+            else if (betId === 'low_1_18') contractBetType = 'LOW';
+            else if (betId === 'high_19_36') contractBetType = 'HIGH';
+            else contractBetType = betId.toUpperCase();
+            break;
+          default:
+            contractBetType = (config.type as string).toUpperCase();
         }
+
+        const bet: { betType: string, number?: number, numbers?: number[], amount: number } = {
+          betType: contractBetType,
+          amount: amount
+        };
+
+        // Add number/numbers based on bet type
+        if (config.type === 'straight' && config.numbers.length === 1) {
+          bet.number = config.numbers[0];
+        } else if (['split', 'street', 'corner', 'sixline'].includes(config.type)) {
+          bet.numbers = config.numbers;
+        }
+        // Note: dozen, column, and even_money bets don't need numbers - the type itself defines the numbers
+
+        betsArg.push(bet);
       }
 
       if (betsArg.length === 0) {
@@ -206,6 +232,10 @@ const RoulettePage = () => {
 
       const mutation = `mutation { playRoulette(bets: [${betsString}]) }`;
       await lineraAdapter.mutate(mutation);
+
+      // Clear pendingBet now - contract has deducted the bet
+      // This prevents double-counting when refreshData updates the balance
+      setPendingBet(0);
 
       // Poll for result
       let winningNum: number | null = null;
@@ -248,16 +278,10 @@ const RoulettePage = () => {
   };
 
   const handleSpinEnd = (number: number) => {
-    // Calculate Winnings locally for display (or trust server balance)
-    // We use the server balance passed in
-
-    // Calculate diff for the "YOU WON" popup
-    // We don't have the explicit payout amount from the query above (only balance),
-    // but we can infer or fetch history. For responsiveness, we'll rely on balance update.
-    // Or calculate locally just for show:
+    // Calculate Winnings locally for display using new BET_REGISTRY
     let totalWin = 0;
-    placedChips.forEach((chip) => {
-      const payout = calculatePayout(chip, number);
+    placedBets.forEach((amount, betId) => {
+      const payout = calculatePayout(betId, amount, number);
       totalWin += payout;
     });
 
@@ -279,7 +303,7 @@ const RoulettePage = () => {
   };
 
   const resetGame = () => {
-    setPlacedChips(new Map());
+    setPlacedBets(new Map());
     setStage(GameStages.PLACE_BET);
     setWinningNumber({ next: null });
     setLastWinAmount(0);
@@ -318,7 +342,7 @@ const RoulettePage = () => {
           </div>
         </div>
 
-        <div className="flex flex-col xl:flex-row gap-8 items-start justify-center w-full max-w-7xl">
+        <div className="flex flex-col gap-8 items-center justify-center w-full">
 
           <div className="flex flex-col items-center gap-6">
             <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm">
@@ -332,165 +356,146 @@ const RoulettePage = () => {
 
           <div className="flex flex-col items-center gap-6 flex-1">
 
-            <div className="flex flex-col items-center gap-6 bg-black/40 p-6 rounded-xl border border-white/10 w-full max-w-3xl backdrop-blur-sm shadow-md">
-
-              <div className="flex flex-col items-center gap-2">
-                <h3 className="text-green-200 font-semibold uppercase tracking-wider text-sm">Select Chip Value</h3>
-                <div className="flex gap-4 flex-wrap justify-center p-2">
-                  {[1, 2, 3, 4, 5].map(val => (
-                    <div
-                      key={val}
-                      className={getChipClasses(val, selectedChip)}
-                      onClick={() => setSelectedChip(val)}
-                    >
-                      {val}
-                    </div>
-                  ))}
-                </div>
+            {/* Chip Selection - Blackjack Style */}
+            <div className="flex flex-col items-center gap-4 bg-green-900/50 p-6 rounded-lg border-2 border-green-700/50 w-full max-w-lg">
+              <h3 className="text-xl font-semibold text-green-200">Select Your Chip</h3>
+              <div className="flex items-center gap-4 flex-wrap justify-center">
+                {[1, 5, 10, 25, 100].map((chipValue) => (
+                  <button
+                    key={chipValue}
+                    onClick={() => setSelectedChip(chipValue)}
+                    disabled={busy || (isConnected && availableBalance < chipValue)}
+                    className={`relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg ${selectedChip === chipValue
+                      ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
+                      : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {chipValue}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex gap-4 w-full justify-center">
+              {/* Total Bet Display */}
+              <div className="text-lg text-green-300 font-semibold">
+                Total Bet: <span className="text-yellow-400">${currentTotalBet}</span>
+              </div>
+
+              {/* Clear Bet / Spin Buttons */}
+              <div className="flex gap-4">
                 <button
                   onClick={clearBet}
-                  disabled={stage !== GameStages.PLACE_BET || placedChips.size === 0 || busy}
-                  className="px-8 py-3 bg-red-600/90 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all border-b-4 border-red-800 active:border-b-0 active:translate-y-1"
+                  disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0}
+                  className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all shadow-lg"
                 >
                   Clear Bets
                 </button>
                 <button
                   onClick={spin}
-                  disabled={stage !== GameStages.PLACE_BET || placedChips.size === 0 || busy || !isConnected}
-                  className="px-16 py-3 bg-gradient-to-r from-amber-400 to-yellow-600 hover:from-amber-300 hover:to-yellow-500 text-black font-extrabold text-2xl rounded-xl shadow-[0_0_20px_#ca8a04] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed transform hover:scale-105 transition-all border-b-4 border-amber-700 active:border-b-0 active:translate-y-1"
+                  disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0 || busy}
+                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all shadow-xl transform hover:scale-105"
                 >
-                  {stage === GameStages.PLACE_BET ? (busy ? "WAIT..." : "SPIN") : "SPINNING..."}
+                  {busy ? '🎰 Spinning...' : '🎰 Spin Wheel'}
                 </button>
               </div>
             </div>
-
-            <div className={`transform origin-top scale-[0.6] md:scale-[0.75] lg:scale-[0.85] p-4 bg-black/20 rounded-xl border border-white/5 ${debugMode ? 'debug-mode' : ''}`}>
-              <Board
-                onCellClick={onCellClick}
-                chipsData={{ selectedChip, placedChips }}
-                rouletteData={rouletteData}
-              />
-            </div>
-
-            {/* Debug Mode Toggle */}
-            <button
-              onClick={() => setDebugMode(!debugMode)}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg shadow transition-all ${debugMode ? 'bg-lime-500 text-black' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              🔧 Debug: {debugMode ? 'ON' : 'OFF'}
-            </button>
           </div>
-        </div>
 
-        {/* Debug Legend */}
-        {debugMode && (
-          <div className="debug-legend">
-            <div className="font-bold mb-2 text-lime-400">Bet Position Legend:</div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-dot" style={{ background: 'lime' }}></div>
-              <span>Number (35:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-line" style={{ background: 'cyan' }}></div>
-              <span>Split - 2 nums (17:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-line" style={{ background: 'yellow' }}></div>
-              <span>Street - 3 nums (11:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-square" style={{ background: 'magenta' }}></div>
-              <span>Corner - 4 nums (8:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-rect" style={{ background: 'orange' }}></div>
-              <span>Dozen (2:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-rect" style={{ background: '#3b82f6' }}></div>
-              <span>Even Money (1:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-dot" style={{ background: '#ef4444', border: '2px solid white' }}></div>
-              <span>Red (1:1)</span>
-            </div>
-            <div className="debug-legend-item">
-              <div className="debug-legend-dot" style={{ background: '#1f2937', border: '2px solid white' }}></div>
-              <span>Black (1:1)</span>
-            </div>
-          </div>
-        )}
+          {/* New SVG-based Board with hitboxes - FULL WIDTH */}
+          <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
+            <RouletteBoardBlueprint
+              debug={false}
+              onBetSelected={handleBetSelected}
+              placedBets={placedBets}
+            />
 
-        {showHistory && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-2 border-green-600 p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-              <div className="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
-                <h2 className="text-3xl font-bold text-green-400">Winning Numbers</h2>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <span className="text-2xl">✕</span>
-                </button>
-              </div>
-
-              {history.length === 0 ? (
-                <p className="text-green-300/50 text-center py-12 text-xl">No spins yet.</p>
-              ) : (
-                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-4">
-                  {history.map((num, i) => (
-                    <div key={i} className={`w-12 h-12 flex items-center justify-center rounded-full font-bold text-lg shadow-md border-2 border-white/20 ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                      {num}
+            {/* Placed Bets Summary - Visual Chips */}
+            {placedBets.size > 0 && (
+              <div className="mt-4 p-4 bg-green-900/50 rounded-lg border border-green-700/30">
+                <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
+                <div className="flex flex-wrap gap-3">
+                  {Array.from(placedBets.entries()).map(([betId, amount]) => (
+                    <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
+                      {/* Visual chip */}
+                      <div className="w-8 h-8 rounded-full border-2 border-white bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-xs font-bold shadow-md">
+                        {amount}
+                      </div>
+                      <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Result Modal */}
-        {stage === GameStages.WINNERS && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
+        </div>
+      </div>
 
-              <div className="flex flex-col items-center gap-2">
-                <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
-                <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                  {history[0]}
-                </div>
-              </div>
-
-              <div className="text-center space-y-2">
-                {lastWinAmount > 0 ? (
-                  <>
-                    <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
-                      YOU WON
-                    </div>
-                    <div className="text-4xl font-bold text-yellow-400">
-                      ${lastWinAmount}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
-                    YOU LOST
-                  </div>
-                )}
-              </div>
-
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-2 border-green-600 p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
+              <h2 className="text-3xl font-bold text-green-400">Winning Numbers</h2>
               <button
-                onClick={resetGame}
-                className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
+                onClick={() => setShowHistory(false)}
+                className="text-gray-400 hover:text-white transition-colors"
               >
-                Play Again
+                <span className="text-2xl">✕</span>
               </button>
             </div>
+
+            {history.length === 0 ? (
+              <p className="text-green-300/50 text-center py-12 text-xl">No spins yet.</p>
+            ) : (
+              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-4">
+                {history.map((num, i) => (
+                  <div key={i} className={`w-12 h-12 flex items-center justify-center rounded-full font-bold text-lg shadow-md border-2 border-white/20 ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                    {num}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Result Modal */}
+      {stage === GameStages.WINNERS && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
+
+            <div className="flex flex-col items-center gap-2">
+              <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
+              <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                {history[0]}
+              </div>
+            </div>
+
+            <div className="text-center space-y-2">
+              {lastWinAmount > 0 ? (
+                <>
+                  <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
+                    YOU WON
+                  </div>
+                  <div className="text-4xl font-bold text-yellow-400">
+                    ${lastWinAmount}
+                  </div>
+                </>
+              ) : (
+                <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
+                  YOU LOST
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={resetGame}
+              className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
+            >
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

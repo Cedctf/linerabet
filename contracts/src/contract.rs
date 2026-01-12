@@ -8,9 +8,9 @@ use linera_sdk::{
     Contract, ContractRuntime,
 };
 
-use contracts::{CasinoParams, CasinoInit, Operation, Message, GameType, GameAction, GameResult, Card};
+use contracts::{CasinoParams, CasinoInit, Operation, Message, GameType, GameAction, GameResult, Card, RouletteBet, RouletteBetType};
 
-use self::state::{ContractsState, PendingGame, ActiveGame, GamePhase, GameRecord, ALLOWED_BETS};
+use self::state::{ContractsState, PendingGame, ActiveGame, GamePhase, GameRecord, PendingRouletteGame, ALLOWED_BETS};
 
 const SUITS: [&str; 4] = ["clubs", "diamonds", "hearts", "spades"];
 const VALUES: [&str; 13] = [
@@ -84,6 +84,14 @@ impl Contract for ContractsContract {
             Operation::DoubleDown => {
                 self.handle_double_down(signer).await;
             }
+
+            Operation::PlayRoulette { bets } => {
+                self.handle_play_roulette(signer, bets).await;
+            }
+
+            Operation::ReportRouletteResult { game_id, claimed_outcome } => {
+                self.handle_report_roulette_result(signer, game_id, claimed_outcome).await;
+            }
         }
     }
 
@@ -104,6 +112,14 @@ impl Contract for ContractsContract {
             Message::ReportResult { game_id, player, actions } => {
                 self.bank_handle_report_result(game_id, player, actions).await;
             }
+
+            Message::RequestRouletteGame { player, player_chain, bets } => {
+                self.bank_handle_request_roulette(player, player_chain, bets).await;
+            }
+
+            Message::ReportRouletteResult { game_id, claimed_outcome } => {
+                self.bank_handle_report_roulette_result(game_id, claimed_outcome).await;
+            }
             
             // ═══════════════════════════════════════════════════════════════
             // PLAYER RECEIVES FROM BANK
@@ -119,6 +135,14 @@ impl Contract for ContractsContract {
             
             Message::GameSettled { game_id, result, payout, dealer_hand } => {
                 self.player_handle_game_settled(game_id, result, payout, dealer_hand).await;
+            }
+
+            Message::RouletteGameReady { game_id, seed, bets } => {
+                self.player_handle_roulette_ready(game_id, seed, bets).await;
+            }
+
+            Message::RouletteSettled { game_id, outcome, payout, bets } => {
+                self.player_handle_roulette_settled(game_id, outcome, payout, bets).await;
             }
         }
     }
@@ -286,6 +310,29 @@ impl ContractsContract {
                 player,
                 actions: game.actions.clone(),
             })
+            .send_to(bank_chain_id);
+    }
+
+    /// Player starts a Roulette game - deducts total bet and sends to Bank
+    async fn handle_play_roulette(&mut self, signer: linera_base::identifiers::AccountOwner, bets: Vec<RouletteBet>) {
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= total_bet, "Insufficient balance");
+        
+        // Deduct bet (escrow)
+        self.state.player_balance.set(balance - total_bet);
+        
+        // Send request to Bank
+        let bank_chain_id = self.bank_chain_id();
+        let player_chain = self.runtime.chain_id();
+        
+        self.runtime
+            .prepare_message(Message::RequestRouletteGame {
+                player: signer,
+                player_chain,
+                bets,
+            })
             .with_tracking()
             .send_to(bank_chain_id);
     }
@@ -379,6 +426,8 @@ impl ContractsContract {
                     result,
                     payout,
                     timestamp: now,
+                    roulette_bets: None,
+                    roulette_outcome: None,
                 };
                 self.state.game_history.push(record);
             }
@@ -386,6 +435,81 @@ impl ContractsContract {
         
         // Clear current game
         self.state.current_game.set(None);
+    }
+
+    /// Player receives roulette seed from Bank - calculate outcome locally
+    async fn player_handle_roulette_ready(&mut self, game_id: u64, seed: u64, bets: Vec<RouletteBet>) {
+        // Calculate outcome locally using same RNG as bank
+        let mut rng = SimpleRng::new(seed);
+        let outcome = (rng.next() % 37) as u8;
+        
+        // Store pending roulette game for UI to query
+        let pending = PendingRouletteGame {
+            game_id,
+            seed,
+            bets: bets.clone(),
+            outcome,
+        };
+        self.state.pending_roulette.set(Some(pending));
+        
+        // Send verification to bank (bank has player info stored from RequestRouletteGame)
+        let bank_chain_id = self.bank_chain_id();
+        
+        self.runtime
+            .prepare_message(Message::ReportRouletteResult {
+                game_id,
+                claimed_outcome: outcome,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+
+    /// Player sends roulette result to bank for verification (called by operation if auto-send fails)
+    async fn handle_report_roulette_result(&mut self, _signer: linera_base::identifiers::AccountOwner, game_id: u64, claimed_outcome: u8) {
+        // Get pending roulette game
+        let pending = self.state.pending_roulette.get().clone()
+            .expect("No pending roulette game");
+        assert!(pending.game_id == game_id, "Game ID mismatch");
+        assert!(pending.outcome == claimed_outcome, "Outcome mismatch");
+        
+        // Send to bank
+        let bank_chain_id = self.bank_chain_id();
+        
+        self.runtime
+            .prepare_message(Message::ReportRouletteResult {
+                game_id,
+                claimed_outcome,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+
+    /// Player receives roulette settlement from Bank
+    async fn player_handle_roulette_settled(&mut self, game_id: u64, outcome: u8, payout: u64, bets: Vec<RouletteBet>) {
+        // Credit payout to player
+        let balance = *self.state.player_balance.get();
+        self.state.player_balance.set(balance + payout);
+        
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        let now = self.runtime.system_time().micros();
+        
+        // Record in history
+        let record = GameRecord {
+            game_id,
+            game_type: GameType::Roulette,
+            player_hand: vec![],
+            dealer_hand: vec![],
+            bet: total_bet,
+            result: if payout > 0 { GameResult::PlayerWin } else { GameResult::DealerWin },
+            payout,
+            timestamp: now,
+            roulette_bets: Some(bets),
+            roulette_outcome: Some(outcome),
+        };
+        self.state.game_history.push(record);
+        
+        // Clear pending roulette
+        self.state.pending_roulette.set(None);
     }
 }
 
@@ -473,6 +597,98 @@ impl ContractsContract {
         // Send result to player (including full dealer hand)
         self.runtime
             .prepare_message(Message::GameSettled { game_id, result, payout, dealer_hand })
+            .with_tracking()
+            .send_to(pending.player_chain);
+    }
+
+    /// Bank receives roulette game request - generate seed and send back
+    async fn bank_handle_request_roulette(
+        &mut self,
+        player: linera_base::identifiers::AccountOwner,
+        player_chain: linera_base::identifiers::ChainId,
+        bets: Vec<RouletteBet>,
+    ) {
+        // Generate unique game ID
+        let game_id = *self.state.game_counter.get();
+        self.state.game_counter.set(game_id + 1);
+        
+        // Generate seed for this game
+        let master_seed = *self.state.master_seed.get();
+        let now = self.runtime.system_time().micros();
+        let seed = generate_game_seed(master_seed, game_id, &player, now);
+        
+        // Store pending game
+        self.state.pending_games.insert(&game_id, PendingGame {
+            player,
+            player_chain,
+            game_type: GameType::Roulette,
+            bet: bets.iter().map(|b| b.amount).sum(),
+            seed,
+            created_at: now,
+        }).expect("Failed to insert pending game");
+        
+        // Store bets separately for payout calculation
+        self.state.pending_roulette_bets.insert(&game_id, bets.clone())
+            .expect("Failed to insert pending bets");
+        
+        // Send seed to player (player will calculate outcome locally)
+        self.runtime
+            .prepare_message(Message::RouletteGameReady { 
+                game_id, 
+                seed, 
+                bets 
+            })
+            .with_tracking()
+            .send_to(player_chain);
+    }
+
+    /// Bank verifies and settles roulette game
+    async fn bank_handle_report_roulette_result(
+        &mut self,
+        game_id: u64,
+        claimed_outcome: u8,
+    ) {
+        // Get pending game
+        let pending = self.state.pending_games.get(&game_id).await
+            .expect("Failed to get pending game")
+            .expect("Game not found");
+        
+        // Game_id is unique and already tied to the player from RequestRouletteGame
+        
+        // Verify outcome
+        let mut rng = SimpleRng::new(pending.seed);
+        let expected_outcome = (rng.next() % 37) as u8;
+        assert!(claimed_outcome == expected_outcome, "Outcome verification failed");
+        
+        // Get stored bets
+        let bets = self.state.pending_roulette_bets.get(&game_id).await
+            .expect("Failed to get bets")
+            .expect("Bets not found");
+        
+        // Calculate payout using actual bets
+        let payout = calculate_roulette_payout(&bets, expected_outcome);
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        
+        // Update house balance
+        let house = *self.state.house_balance.get();
+        if payout > total_bet {
+            self.state.house_balance.set(house.saturating_sub(payout - total_bet));
+        } else {
+            self.state.house_balance.set(house + (total_bet - payout));
+        }
+        
+        // Remove pending game and bets
+        self.state.pending_games.remove(&game_id).expect("Failed to remove pending game");
+        self.state.pending_roulette_bets.remove(&game_id).expect("Failed to remove pending bets");
+        
+        // Send settlement to player
+        self.runtime
+            .prepare_message(Message::RouletteSettled { 
+                game_id, 
+                outcome: expected_outcome, 
+                payout,
+                bets,
+            })
             .with_tracking()
             .send_to(pending.player_chain);
     }
@@ -611,6 +827,69 @@ fn calculate_hand_value(cards: &[Card]) -> u8 {
     }
 
     total
+}
+
+fn calculate_roulette_payout(bets: &[RouletteBet], outcome: u8) -> u64 {
+    let mut payout = 0;
+    for bet in bets {
+        let win = match bet.bet_type {
+            RouletteBetType::Number => bet.number == Some(outcome),
+            RouletteBetType::Split => {
+                // Check if outcome is in the numbers array
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Street => {
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Corner => {
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Line => {
+                // Line bet: 6 numbers (2 adjacent streets)
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Basket => {
+                // First Four: 0, 1, 2, 3
+                outcome == 0 || outcome == 1 || outcome == 2 || outcome == 3
+            },
+            RouletteBetType::Red => {
+                let red_numbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+                red_numbers.contains(&outcome)
+            },
+            RouletteBetType::Black => {
+                let black_numbers = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+                black_numbers.contains(&outcome)
+            },
+            RouletteBetType::Even => outcome != 0 && outcome % 2 == 0,
+            RouletteBetType::Odd => outcome != 0 && outcome % 2 != 0,
+            RouletteBetType::Low => outcome >= 1 && outcome <= 18,
+            RouletteBetType::High => outcome >= 19 && outcome <= 36,
+            RouletteBetType::Dozen1 => outcome >= 1 && outcome <= 12,
+            RouletteBetType::Dozen2 => outcome >= 13 && outcome <= 24,
+            RouletteBetType::Dozen3 => outcome >= 25 && outcome <= 36,
+            RouletteBetType::Column1 => outcome != 0 && outcome % 3 == 0,  // 3,6,9,12,15,18,21,24,27,30,33,36
+            RouletteBetType::Column2 => outcome != 0 && outcome % 3 == 2,  // 2,5,8,11,14,17,20,23,26,29,32,35
+            RouletteBetType::Column3 => outcome != 0 && outcome % 3 == 1,  // 1,4,7,10,13,16,19,22,25,28,31,34
+        };
+        
+        if win {
+            let multiplier = match bet.bet_type {
+                RouletteBetType::Number => 36,   // 35:1
+                RouletteBetType::Split => 18,    // 17:1
+                RouletteBetType::Street => 12,   // 11:1
+                RouletteBetType::Corner => 9,    // 8:1
+                RouletteBetType::Line => 6,      // 5:1
+                RouletteBetType::Basket => 7,    // 6:1
+                RouletteBetType::Dozen1 | RouletteBetType::Dozen2 | RouletteBetType::Dozen3 => 3, // 2:1
+                RouletteBetType::Column1 | RouletteBetType::Column2 | RouletteBetType::Column3 => 3, // 2:1
+                RouletteBetType::Red | RouletteBetType::Black | 
+                RouletteBetType::Even | RouletteBetType::Odd | 
+                RouletteBetType::Low | RouletteBetType::High => 2, // 1:1
+            };
+            payout += bet.amount * multiplier;
+        }
+    }
+    payout
 }
 
 struct SimpleRng(u64);
