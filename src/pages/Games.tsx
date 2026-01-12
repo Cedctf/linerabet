@@ -1,77 +1,85 @@
-
 import { Link } from 'react-router-dom';
 
 const games = [
     {
-        name: 'Roulette',
+        name: 'ROULETTE',
         path: '/roulette',
-        description: 'Spin the wheel of fortune and test your luck.',
-        image: '/games/roulette.jpg' // Assuming these images exist as per Home.tsx
+        image: '/roulette.jpg',
+        gradient: 'from-orange-400 via-yellow-500 to-orange-600',
+        borderColor: 'border-yellow-300'
     },
     {
-        name: 'Blackjack',
+        name: 'BLACKJACK',
         path: '/blackjack',
-        description: 'Beat the dealer with classic 21.',
-        image: '/games/blackjack.jpg'
+        image: '/blackjack.png',
+        gradient: 'from-blue-400 via-blue-500 to-blue-700',
+        borderColor: 'border-blue-300'
     },
     {
-        name: 'Baccarat',
+        name: 'BACCARAT',
         path: '/baccarat',
-        description: 'High stakes elegance and simple rules.',
-        image: '/games/baccarat.jpg'
+        image: '/baccarat.png',
+        gradient: 'from-purple-400 via-pink-500 to-purple-700',
+        borderColor: 'border-pink-300'
     }
 ];
 
 export default function Games() {
     return (
-        <div className="min-h-screen bg-black text-white relative flex flex-col pt-20">
-            {/* Animated Background - Reused from Home.tsx for consistency */}
-            <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-green-950 opacity-80 pointer-events-none"></div>
+        <div className="min-h-screen bg-[#0F172A] relative overflow-hidden font-sans selection:bg-green-500 selection:text-white">
+            {/* Background - Blue sky/game world feel */}
+            <div className="absolute inset-0 bg-[url('/Landing.png')] bg-cover bg-center opacity-30"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0284c7]/40 to-[#0f172a]/90"></div>
 
-            {/* Grid Pattern Overlay */}
-            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
-                backgroundImage: `linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)`,
-                backgroundSize: '50px 50px'
-            }}></div>
-
-            {/* Green Glow Effects */}
-            <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl pointer-events-none"></div>
-            <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl pointer-events-none"></div>
-
-
-            <main className="relative z-10 max-w-7xl mx-auto px-6 w-full flex-grow flex flex-col items-center justify-center">
-                <h1 className="text-4xl md:text-5xl font-bold mb-12 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
-                    Select Your Game
+            {/* Header */}
+            <div className="relative z-20 flex justify-between items-center px-8 py-6">
+                <h1 className="text-5xl md:text-6xl font-black italic tracking-wider text-white drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                    SELECT GAME
                 </h1>
+            </div>
 
-                <div className="grid md:grid-cols-3 gap-8 w-full">
-                    {games.map((game) => (
-                        <Link to={game.path} key={game.name} className="group relative block h-96 rounded-xl overflow-hidden border border-green-500/20 shadow-2xl shadow-green-500/10 hover:shadow-green-500/30 transition-all duration-300 transform hover:-translate-y-2">
-                            {/* Background Image */}
-                            <div className="absolute inset-0">
-                                <img
-                                    src={game.image}
-                                    alt={game.name}
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
-                            </div>
+            {/* Cards Container */}
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-center min-h-[80vh] gap-6 px-4 pb-10">
+                {games.map((game) => (
+                    <Link
+                        to={game.path}
+                        key={game.name}
+                        className={`
+                            group relative w-full md:w-[30%] max-w-md h-[65vh] 
+                            transform md:-skew-x-6
+                            transition-all duration-300 hover:scale-105 hover:z-20 hover:shadow-[0_0_50px_rgba(255,255,255,0.2)]
+                            border-[6px] ${game.borderColor} rounded-xl overflow-hidden
+                            bg-gradient-to-br ${game.gradient}
+                            shadow-2xl
+                        `}
+                    >
+                        {/* Image Container */}
+                        <div className="absolute inset-0 m-1 bg-black/20 rounded-lg overflow-hidden">
+                            <img
+                                src={game.image}
+                                alt={game.name}
+                                className="w-full h-full object-cover transform md:skew-x-6 scale-125 group-hover:scale-110 transition-transform duration-500 opacity-80 group-hover:opacity-100 mix-blend-overlay"
+                            />
+                            {/* Character/Game Image Overlay - using same image for now but fully visible */}
+                            <img
+                                src={game.image}
+                                alt={game.name}
+                                className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[120%] h-auto object-contain transform md:skew-x-6 translate-y-10 group-hover:translate-y-0 transition-transform duration-500 drop-shadow-2xl"
+                            />
+                        </div>
 
-                            {/* Content */}
-                            <div className="absolute bottom-0 w-full p-6 z-10">
-                                <h3 className="text-3xl font-bold text-white mb-2 group-hover:text-green-400 transition-colors">{game.name}</h3>
-                                <p className="text-gray-300 text-sm mb-4">{game.description}</p>
-                                <div className="inline-block px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors">
-                                    Play Now
-                                </div>
-                            </div>
+                        {/* Text Overlay */}
+                        <div className="absolute top-6 left-0 w-full text-center z-30 transform md:skew-x-6">
+                            <h2 className="text-4xl font-black text-white italic uppercase drop-shadow-[0_3px_0_rgba(0,0,0,0.5)] tracking-wide">
+                                {game.name}
+                            </h2>
+                        </div>
 
-                            {/* Hover Border Glow */}
-                            <div className="absolute inset-0 border-2 border-transparent group-hover:border-green-500/50 rounded-xl transition-colors pointer-events-none"></div>
-                        </Link>
-                    ))}
-                </div>
-            </main>
+                        {/* Shine effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
+                    </Link>
+                ))}
+            </div>
         </div>
     );
 }

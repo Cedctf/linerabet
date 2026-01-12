@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
-import { CONTRACTS_APP_ID } from '../constants';
+import { CONTRACTS_APP_ID, LINERA_RPC_URL } from '../constants';
 
 interface GameContextType {
     lineraData: { chainId: string; address: string; balance: string; gameBalance?: number } | null;
     isConnecting: boolean;
     refreshData: () => Promise<void>;
+    pendingBet: number;
+    setPendingBet: (amount: number) => void;
+    balanceLocked: boolean;
+    setBalanceLocked: (locked: boolean) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -15,6 +19,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { primaryWallet } = useDynamicContext();
     const [lineraData, setLineraData] = useState<{ chainId: string; address: string; balance: string; gameBalance?: number } | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [pendingBet, setPendingBet] = useState(0);
+    const [balanceLocked, setBalanceLocked] = useState(false);
 
     const refreshData = useCallback(async () => {
         if (!primaryWallet || !lineraAdapter.isChainConnected()) return;
@@ -29,12 +35,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         let gameBalance = 0;
         try {
-            const owner = lineraAdapter.identity();
-            const query = `query GetBalance($owner: AccountOwner!) { player(owner: $owner) { playerBalance } }`;
-            const data = await lineraAdapter.queryApplication<{ player: { playerBalance: number } | null }>(query, { owner });
-            if (data.player) {
-                gameBalance = data.player.playerBalance;
-            }
+            // New cross-chain API: playerBalance is a direct field, not nested under player(owner)
+            const query = `query { playerBalance }`;
+            const data = await lineraAdapter.queryApplication<{ playerBalance: number }>(query, {});
+            gameBalance = data.playerBalance || 0;
         } catch (e) {
             console.warn("Refreshed game balance failed:", e);
         }
@@ -53,7 +57,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                 if (!lineraAdapter.isChainConnected()) {
                     try {
                         setIsConnecting(true);
-                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net/';
+                        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || LINERA_RPC_URL;
                         await lineraAdapter.connect(primaryWallet, faucetUrl);
 
                         // Set app ID once
@@ -93,7 +97,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, [lineraData, refreshData]);
 
     return (
-        <GameContext.Provider value={{ lineraData, isConnecting, refreshData }}>
+        <GameContext.Provider value={{ lineraData, isConnecting, refreshData, pendingBet, setPendingBet, balanceLocked, setBalanceLocked }}>
             {children}
         </GameContext.Provider>
     );

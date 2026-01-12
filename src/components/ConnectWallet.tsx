@@ -7,7 +7,7 @@ import { useGame } from '../context/GameContext';
 
 export default function ConnectWallet() {
     const { primaryWallet, setShowAuthFlow } = useDynamicContext();
-    const { lineraData, isConnecting, refreshData } = useGame();
+    const { lineraData, isConnecting, refreshData, pendingBet, balanceLocked } = useGame();
     const [isBuying, setIsBuying] = useState(false);
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
@@ -28,6 +28,8 @@ export default function ConnectWallet() {
             }
 
             // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
+            // 1. Transfer skipped to simplify UX (devnet/testnet faucet)
+            /*
             await lineraAdapter.client.transfer({
                 recipient: {
                     chain_id: chainId,
@@ -35,6 +37,7 @@ export default function ConnectWallet() {
                 },
                 amount: 1,
             });
+            */
 
             // 2. Request chips from contract
             const mutation = `mutation { requestChips }`;
@@ -73,7 +76,9 @@ export default function ConnectWallet() {
 
                     <div className="flex items-center gap-2">
                         <span className="text-yellow-400 font-bold text-sm">
-                            {lineraData.gameBalance !== undefined ? lineraData.gameBalance : "..."} Chips
+                            {lineraData.gameBalance !== undefined
+                                ? (balanceLocked ? lineraData.gameBalance : (lineraData.gameBalance - pendingBet))
+                                : "..."} Chips
                         </span>
 
                         <button
@@ -145,9 +150,10 @@ After Purchase:
         <button
             onClick={() => setShowAuthFlow(true)}
             disabled={isConnecting}
-            className="px-6 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 rounded-lg font-bold text-white transition-all transform hover:scale-105 shadow-lg shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 rounded-xl font-black italic tracking-wider text-white transition-all transform hover:scale-105 shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ fontFamily: 'system-ui, sans-serif' }}
         >
-            {isConnecting ? 'Connecting to Linera...' : 'Connect Wallet'}
+            {isConnecting ? 'CONNECTING...' : 'CONNECT WALLET'}
         </button>
     );
 }

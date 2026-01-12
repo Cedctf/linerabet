@@ -1,25 +1,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Wheel from "../components/roulette/Wheel";
-import Board from "../components/roulette/Board";
-import { GameStages, ValueType } from "../components/roulette/Global";
-import type { Item, PlacedChip } from "../components/roulette/Global";
+import { GameStages } from "../components/roulette/Global";
 import "../components/roulette/roulette.css";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
-import { BLACK_NUMBERS, calculatePayout, getChipClasses, WHEEL_NUMBERS } from "@/lib/roulette-utils";
+import { BLACK_NUMBERS, WHEEL_NUMBERS } from "@/lib/roulette-utils";
+import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout } from "../components/roulette-blueprint";
+import type { BetPayload } from "../components/roulette-blueprint";
 
 
 
 const RoulettePage = () => {
-  const { lineraData, refreshData } = useGame();
+  const { lineraData, refreshData, setPendingBet, setBalanceLocked, balanceLocked } = useGame();
   // derived balance from context
   const serverBalance = lineraData?.gameBalance || 0;
   const isConnected = !!lineraData;
 
-  const [selectedChip, setSelectedChip] = useState<number | null>(1);
-  const [placedChips, setPlacedChips] = useState<Map<Item, PlacedChip>>(new Map());
+  const [selectedChip, setSelectedChip] = useState<number>(1);
+  // NEW: Map of hotspot ID -> bet amount (replaces old placedChips)
+  const [placedBets, setPlacedBets] = useState<Map<string, number>>(new Map());
   const [stage, setStage] = useState<GameStages>(GameStages.PLACE_BET);
   const [winningNumber, setWinningNumber] = useState<any>({ next: null });
   const [history, setHistory] = useState<number[]>([]);
@@ -29,11 +30,30 @@ const RoulettePage = () => {
 
   const rouletteData = { numbers: WHEEL_NUMBERS };
 
-  // Calculate total currently placed bets
-  const currentTotalBet = Array.from(placedChips.values()).reduce((acc, chip) => acc + chip.sum, 0);
+  // Calculate total currently placed bets (from new placedBets map)
+  const currentTotalBet = Array.from(placedBets.values()).reduce((acc, amount) => acc + amount, 0);
 
   // Available balance for new bets
   const availableBalance = serverBalance - currentTotalBet;
+
+  // Sync pendingBet with context for header display - only during betting phase when not locked
+  useEffect(() => {
+    // Only sync pending bet when:
+    // 1. User is placing bets (stage = PLACE_BET)
+    // 2. Balance is NOT locked (we're not in mid-spin/result)
+    // This prevents race conditions during resetGame()
+    if (stage === GameStages.PLACE_BET && !balanceLocked) {
+      setPendingBet(currentTotalBet);
+    }
+  }, [currentTotalBet, stage, setPendingBet, balanceLocked]);
+
+  // Clear pendingBet and unlock balance on unmount only
+  useEffect(() => {
+    return () => {
+      setPendingBet(0);
+      setBalanceLocked(false);
+    };
+  }, [setPendingBet, setBalanceLocked]);
 
   // Refresh history / sync
   const refresh = useCallback(async () => {
@@ -45,26 +65,34 @@ const RoulettePage = () => {
         await lineraAdapter.setApplication(CONTRACTS_APP_ID);
       }
 
-      const owner = lineraAdapter.identity();
+
       const query = `
-                query GetRouletteState($owner: AccountOwner!) {
-                    player(owner: $owner) {
-                        lastRouletteOutcome
-                        rouletteHistory {
-                            winningNumber
-                            totalBet
-                            payout
-                            timestamp
+                query GetRouletteState {
+                    gameHistory {
+                        gameType
+                        result
+                        payout
+                        timestamp
+                        rouletteOutcome
+                        rouletteBets {
+                            amount
+                            betType
+                            number
                         }
                     }
                 }
             `;
       // NOTE: We rely on context for balance, but we fetch history here.
 
-      const data = await lineraAdapter.queryApplication<any>(query, { owner });
-      if (data.player) {
+      const data = await lineraAdapter.queryApplication<any>(query);
+      if (data.gameHistory) {
         // Update History
-        const serverHistory = data.player.rouletteHistory.map((r: any) => r.winningNumber).reverse().slice(0, 10);
+        const serverHistory = data.gameHistory
+          .filter((g: any) => g.gameType === "ROULETTE" && g.rouletteOutcome !== null)
+          .map((r: any) => r.rouletteOutcome)
+          .reverse()
+          .slice(0, 10);
+
         if (history.length === 0 && serverHistory.length > 0) {
           setHistory(serverHistory);
         }
@@ -82,69 +110,106 @@ const RoulettePage = () => {
   }, [refresh, refreshData]);
 
 
-  const onCellClick = (item: Item) => {
+  // NEW: Handle clicks from the roulette board blueprint
+  const handleBetSelected = (betId: string, payload: BetPayload) => {
     if (stage !== GameStages.PLACE_BET || busy) return;
 
-    const currentChipValue = selectedChip;
-    if (currentChipValue === null) return;
-
-    // Check against dynamic available balance
-    if (availableBalance < currentChipValue) {
+    // Check against available balance (skip if no wallet connected for testing)
+    if (isConnected && availableBalance < selectedChip) {
       alert("Insufficient balance! Please buy more chips.");
       return;
     }
 
-    const newPlacedChips = new Map(placedChips);
-    const existingChip = newPlacedChips.get(item);
+    // Add bet to placedBets map
+    const newPlacedBets = new Map(placedBets);
+    const existingAmount = newPlacedBets.get(betId) || 0;
+    newPlacedBets.set(betId, existingAmount + selectedChip);
+    setPlacedBets(newPlacedBets);
 
-    if (existingChip) {
-      newPlacedChips.set(item, { ...existingChip, sum: existingChip.sum + currentChipValue });
-    } else {
-      newPlacedChips.set(item, { item, sum: currentChipValue });
-    }
-
-    setPlacedChips(newPlacedChips);
-    // Visual deduction is handled automatically by 'availableBalance' derived variable
+    console.log(`Bet placed: ${payload.label} ($${selectedChip}) - Payout: ${payload.payout}:1`);
   };
 
   const clearBet = () => {
     if (stage !== GameStages.PLACE_BET) return;
-    setPlacedChips(new Map());
+    setPlacedBets(new Map());
   };
 
   const spin = async () => {
     setBusy(true);
     setStage(GameStages.NO_MORE_BETS);
+    // Keep pendingBet during spin - will be cleared after mutation confirms
 
     try {
-      // Construct bets for GraphQL
-      // Contract Bet (Blackjack lib.rs): { betType: RouletteBetType, number: Option<u8>, amount: u64 }
-      // RouletteBetType: Number, Red, Black, Even, Odd, Low, High
-      const betsArg: { betType: string, number?: number, amount: number }[] = [];
+      // Construct bets from placedBets map using BET_REGISTRY
+      const betsArg: { betType: string, number?: number, numbers?: number[], amount: number }[] = [];
 
-      for (const chip of placedChips.values()) {
-        const { item, sum } = chip;
-        if (item.type === ValueType.NUMBER) {
-          betsArg.push({ betType: "NUMBER", number: item.value, amount: sum });
-        } else if (item.type === ValueType.RED) {
-          betsArg.push({ betType: "RED", amount: sum });
-        } else if (item.type === ValueType.BLACK) {
-          betsArg.push({ betType: "BLACK", amount: sum });
-        } else if (item.type === ValueType.EVEN) {
-          betsArg.push({ betType: "EVEN", amount: sum });
-        } else if (item.type === ValueType.ODD) {
-          betsArg.push({ betType: "ODD", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_1_18) {
-          betsArg.push({ betType: "LOW", amount: sum });
-        } else if (item.type === ValueType.NUMBERS_19_36) {
-          betsArg.push({ betType: "HIGH", amount: sum });
-        } else {
-          console.warn("Skipping unsupported bet type:", item.type);
+      for (const [betId, amount] of placedBets.entries()) {
+        const config = BET_REGISTRY[betId];
+        if (!config) continue;
+
+        // Determine the correct contract bet type based on betId and config.type
+        let contractBetType: string;
+
+        switch (config.type) {
+          case 'straight':
+            contractBetType = 'NUMBER';
+            break;
+          case 'split':
+            contractBetType = 'SPLIT';
+            break;
+          case 'street':
+            contractBetType = 'STREET';
+            break;
+          case 'corner':
+            contractBetType = 'CORNER';
+            break;
+          case 'sixline':
+            contractBetType = 'LINE';
+            break;
+          case 'dozen':
+            // Map dozen_1, dozen_2, dozen_3 to DOZEN1, DOZEN2, DOZEN3
+            if (betId === 'dozen_1') contractBetType = 'DOZEN1';
+            else if (betId === 'dozen_2') contractBetType = 'DOZEN2';
+            else contractBetType = 'DOZEN3';
+            break;
+          case 'column':
+            // Map column_1, column_2, column_3 to COLUMN1, COLUMN2, COLUMN3
+            if (betId === 'column_1') contractBetType = 'COLUMN1';
+            else if (betId === 'column_2') contractBetType = 'COLUMN2';
+            else contractBetType = 'COLUMN3';
+            break;
+          case 'even_money':
+            // Map specific even money bets to contract types
+            if (betId === 'red') contractBetType = 'RED';
+            else if (betId === 'black') contractBetType = 'BLACK';
+            else if (betId === 'even') contractBetType = 'EVEN';
+            else if (betId === 'odd') contractBetType = 'ODD';
+            else if (betId === 'low_1_18') contractBetType = 'LOW';
+            else if (betId === 'high_19_36') contractBetType = 'HIGH';
+            else contractBetType = betId.toUpperCase();
+            break;
+          default:
+            contractBetType = (config.type as string).toUpperCase();
         }
+
+        const bet: { betType: string, number?: number, numbers?: number[], amount: number } = {
+          betType: contractBetType,
+          amount: amount
+        };
+
+        // Add number/numbers based on bet type
+        if (config.type === 'straight' && config.numbers.length === 1) {
+          bet.number = config.numbers[0];
+        } else if (['split', 'street', 'corner', 'sixline'].includes(config.type)) {
+          bet.numbers = config.numbers;
+        }
+        // Note: dozen, column, and even_money bets don't need numbers - the type itself defines the numbers
+
+        betsArg.push(bet);
       }
 
       if (betsArg.length === 0) {
-        alert("Only currently supported bet types (Number, Color, Even/Odd, Low/High) will be processed.");
+        alert("No bets placed. Please place at least one bet.");
         setBusy(false);
         setStage(GameStages.PLACE_BET);
         return;
@@ -152,25 +217,58 @@ const RoulettePage = () => {
 
       // Construct query string manually to ensure enum formatting
       const betsString = betsArg.map(b => {
-        // For Number, we include `number: X`. For others, number is omitted (null/None)
-        return `{ betType: ${b.betType}, amount: ${b.amount}${b.number !== undefined ? `, number: ${b.number}` : ""} }`;
+        let parts = [`betType: ${b.betType}`, `amount: ${b.amount}`];
+        if (b.number !== undefined) {
+          parts.push(`number: ${b.number}`);
+        }
+        if (b.numbers !== undefined) {
+          parts.push(`numbers: [${b.numbers.join(", ")}]`);
+        }
+        return `{ ${parts.join(", ")} }`;
       }).join(", ");
 
-      const mutation = `mutation { spinRoulette(bets: [${betsString}]) }`;
+      // Fetch initial history count
+      const initialQuery = `query { gameHistory { gameType } }`;
+      const initialData = await lineraAdapter.queryApplication<any>(initialQuery);
+      const initialCount = initialData.gameHistory
+        ? initialData.gameHistory.filter((g: any) => g.gameType === "ROULETTE").length
+        : 0;
+
+      const mutation = `mutation { playRoulette(bets: [${betsString}]) }`;
       await lineraAdapter.mutate(mutation);
 
-      // Fetch result
-      const owner = lineraAdapter.identity();
-      const query = `query { player(owner: "${owner}") { lastRouletteOutcome playerBalance } }`;
-      const data = await lineraAdapter.queryApplication<any>(query);
-      const winningNum = data.player.lastRouletteOutcome;
+      // LOCK the balance display - the bet has been deducted on-chain now,
+      // so we don't want the header to subtract pendingBet anymore (would double-count).
+      // Balance will be unlocked and refreshed when user dismisses the result modal.
+      setBalanceLocked(true);
 
-      if (winningNum === null || winningNum === undefined) {
-        throw new Error("No outcome returned");
+      // Poll for result
+      let winningNum: number | null = null;
+      let retries = 0;
+
+      while (retries < 40) { // Poll for ~20 seconds (500ms * 40)
+        const query = `query { gameHistory { gameType rouletteOutcome } }`;
+        const data = await lineraAdapter.queryApplication<any>(query);
+        const history = data.gameHistory.filter((g: any) => g.gameType === "ROULETTE");
+
+        if (history.length > initialCount) {
+          const lastGame = history[history.length - 1];
+          if (lastGame.rouletteOutcome !== null && lastGame.rouletteOutcome !== undefined) {
+            winningNum = lastGame.rouletteOutcome;
+            break;
+          }
+        }
+
+        await new Promise(r => setTimeout(r, 500));
+        retries++;
       }
 
-      // Refresh Global Balance
-      await refreshData();
+      if (winningNum === null || winningNum === undefined) {
+        throw new Error("Game timed out waiting for Bank result. Please check history later.");
+      }
+
+      // NOTE: Do NOT refresh balance here - it would cause the display to jump
+      // before the animation/result modal. Balance will be refreshed in resetGame().
 
       // Start Animation targeting the winning number
       setWinningNumber({ next: winningNum.toString(), onStop: () => handleSpinEnd(winningNum) });
@@ -178,6 +276,7 @@ const RoulettePage = () => {
     } catch (err: any) {
       console.error("Spin failed:", err);
       alert("Spin failed: " + err.message);
+      setBalanceLocked(false); // Unlock on error
       setBusy(false);
       setStage(GameStages.PLACE_BET);
       refreshData(); // Sync back to truth
@@ -185,16 +284,10 @@ const RoulettePage = () => {
   };
 
   const handleSpinEnd = (number: number) => {
-    // Calculate Winnings locally for display (or trust server balance)
-    // We use the server balance passed in
-
-    // Calculate diff for the "YOU WON" popup
-    // We don't have the explicit payout amount from the query above (only balance),
-    // but we can infer or fetch history. For responsiveness, we'll rely on balance update.
-    // Or calculate locally just for show:
+    // Calculate Winnings locally for display using new BET_REGISTRY
     let totalWin = 0;
-    placedChips.forEach((chip) => {
-      const payout = calculatePayout(chip, number);
+    placedBets.forEach((amount, betId) => {
+      const payout = calculatePayout(betId, amount, number);
       totalWin += payout;
     });
 
@@ -205,107 +298,153 @@ const RoulettePage = () => {
     }
 
     setHistory(prev => [number, ...prev.slice(0, 9)]);
-    // Balance is updated via context refreshData() called in spin()
+
+    // NOTE: Do NOT refresh balance here - wait until user dismisses the result modal
+    // to prevent any flickering. Balance will be refreshed in resetGame().
+
     setStage(GameStages.WINNERS);
     setBusy(false);
   };
 
-  const resetGame = () => {
-    setPlacedChips(new Map());
-    setStage(GameStages.PLACE_BET);
+  const resetGame = async () => {
+    // IMPORTANT: Clear placedBets FIRST to ensure currentTotalBet becomes 0
+    // before stage changes to PLACE_BET (which triggers useEffect to sync pendingBet)
+    setPlacedBets(new Map());
     setWinningNumber({ next: null });
     setLastWinAmount(0);
+
+    // Now unlock balance and refresh
+    setBalanceLocked(false);
+    setPendingBet(0);
+
+    // Refresh to get the updated balance from the server
+    await refreshData();
+
+    // Finally change stage - useEffect will sync pendingBet to currentTotalBet (which is now 0)
+    setStage(GameStages.PLACE_BET);
   };
 
   const [showHistory, setShowHistory] = useState(false);
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative font-sans">
-      <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-900 to-green-950 opacity-90" />
+      {/* Background Image */}
       <div
-        className="absolute inset-0 opacity-10"
+        className="absolute inset-0 z-0"
         style={{
-          backgroundImage:
-            "linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)",
-          backgroundSize: "50px 50px",
+          backgroundImage: 'url(/roulette-desk.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}
       />
-      <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
+      <div className="absolute inset-0 bg-black/30 z-0" /> {/* Optional overlay for readability */}
+
+      {/* History Button - Bottom Left Corner (always visible) */}
+      <button
+        onClick={() => setShowHistory(!showHistory)}
+        className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+        style={{ width: '8vw', height: '18vh' }}
+      >
+        <img
+          src="/buttons/history.png"
+          alt="History"
+          className="w-full h-full object-contain group-hover:hidden"
+        />
+        <img
+          src="/animations/history.gif"
+          alt="History"
+          className="w-full h-full object-contain hidden group-hover:block"
+        />
+      </button>
 
       <div className="relative z-10 flex flex-col items-center justify-start min-h-screen py-8 px-4 pt-28 overflow-y-auto">
-
-        <div className="relative w-full max-w-6xl mb-8 flex justify-center items-center">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
-            Roulette
-          </h1>
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex gap-4">
-
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center gap-2"
-            >
-              📜 History ({history.length})
-            </button>
+        {/* Header - Top bar */}
+        <div className="absolute top-0 left-0 w-full flex justify-between items-center p-4 z-50">
+          <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
+            Balance: ${serverBalance}
           </div>
         </div>
 
-        <div className="flex flex-col xl:flex-row gap-8 items-start justify-center w-full max-w-7xl">
+        <div className="flex flex-col lg:flex-row gap-8 items-start justify-center w-full max-w-[1800px]">
 
-          <div className="flex flex-col items-center gap-6">
-            <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm">
+          {/* Left Column: Wheel */}
+          <div className="flex flex-col items-center gap-6 lg:w-1/3 lg:sticky lg:top-24">
+            <div className="transform scale-75 lg:scale-100 transition-transform">
               <Wheel rouletteData={rouletteData} number={winningNumber} />
-            </div>
-
-            <div className="h-16 flex items-center justify-center">
-              {/* Placeholder for spacing, modal is now global/overlay */}
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-6 flex-1">
+          {/* Right Column: Board & Controls */}
+          <div className="flex flex-col items-center gap-6 flex-1 w-full lg:w-2/3">
 
-            <div className="flex flex-col items-center gap-6 bg-black/40 p-6 rounded-xl border border-white/10 w-full max-w-3xl backdrop-blur-sm shadow-md">
-
-              <div className="flex flex-col items-center gap-2">
-                <h3 className="text-green-200 font-semibold uppercase tracking-wider text-sm">Select Chip Value</h3>
-                <div className="flex gap-4 flex-wrap justify-center p-2">
-                  {[1, 2, 3, 4, 5].map(val => (
-                    <div
-                      key={val}
-                      className={getChipClasses(val, selectedChip)}
-                      onClick={() => setSelectedChip(val)}
-                    >
-                      {val}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-4 w-full justify-center">
-                <button
-                  onClick={clearBet}
-                  disabled={stage !== GameStages.PLACE_BET || placedChips.size === 0 || busy}
-                  className="px-8 py-3 bg-red-600/90 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all border-b-4 border-red-800 active:border-b-0 active:translate-y-1"
-                >
-                  Clear Bets
-                </button>
-                <button
-                  onClick={spin}
-                  disabled={stage !== GameStages.PLACE_BET || placedChips.size === 0 || busy || !isConnected}
-                  className="px-16 py-3 bg-gradient-to-r from-amber-400 to-yellow-600 hover:from-amber-300 hover:to-yellow-500 text-black font-extrabold text-2xl rounded-xl shadow-[0_0_20px_#ca8a04] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed transform hover:scale-105 transition-all border-b-4 border-amber-700 active:border-b-0 active:translate-y-1"
-                >
-                  {stage === GameStages.PLACE_BET ? (busy ? "WAIT..." : "SPIN") : "SPINNING..."}
-                </button>
-              </div>
-            </div>
-
-            <div className="transform origin-top scale-[0.6] md:scale-[0.75] lg:scale-[0.85] p-4 bg-black/20 rounded-xl border border-white/5">
-              <Board
-                onCellClick={onCellClick}
-                chipsData={{ selectedChip, placedChips }}
-                rouletteData={rouletteData}
+            {/* Board at the TOP of right column */}
+            <div className="w-full px-2">
+              <RouletteBoardBlueprint
+                debug={false}
+                onBetSelected={handleBetSelected}
+                placedBets={placedBets}
               />
             </div>
+
+            {/* Fixed Bottom Right Controls - Matching blackjack2/baccarat2 style */}
+            <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-20">
+              <div className="bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-4 items-center">
+                {/* Chip Selection */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-sm font-semibold text-white/80 text-center">Select Chip Value</div>
+                  <div className="flex items-center gap-2">
+                    {[1, 5, 10, 25, 100].map((chipValue) => (
+                      <button
+                        key={chipValue}
+                        onClick={() => setSelectedChip(chipValue)}
+                        disabled={busy || (isConnected && availableBalance < chipValue)}
+                        className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${selectedChip === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
+                      >
+                        <img
+                          src={`/Chips/chip${chipValue}.png`}
+                          alt={`$${chipValue} Chip`}
+                          className="w-12 h-12 object-contain"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-sm text-green-300 font-semibold">
+                  Total Bet: <span className="text-yellow-400">${currentTotalBet}</span>
+                </div>
+
+                {/* Action Buttons - Image based */}
+                <div className="flex gap-3 items-center">
+                  <button
+                    onClick={clearBet}
+                    disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0}
+                    className="hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ width: '8vw', height: '10vh' }}
+                  >
+                    <img
+                      src="/buttons/clear-bets.png"
+                      alt="Clear Bets"
+                      className="w-full h-full object-contain"
+                    />
+                  </button>
+                  <button
+                    onClick={spin}
+                    disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0 || busy}
+                    className="hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ width: '8vw', height: '10vh' }}
+                  >
+                    <img
+                      src="/buttons/spin.png"
+                      alt="Spin Wheel"
+                      className="w-full h-full object-contain"
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -335,46 +474,49 @@ const RoulettePage = () => {
               )}
             </div>
           </div>
-        )}
+        )
+        }
 
         {/* Result Modal */}
-        {stage === GameStages.WINNERS && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
+        {
+          stage === GameStages.WINNERS && (
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+              <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
 
-              <div className="flex flex-col items-center gap-2">
-                <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
-                <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                  {history[0]}
-                </div>
-              </div>
-
-              <div className="text-center space-y-2">
-                {lastWinAmount > 0 ? (
-                  <>
-                    <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
-                      YOU WON
-                    </div>
-                    <div className="text-4xl font-bold text-yellow-400">
-                      ${lastWinAmount}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
-                    YOU LOST
+                <div className="flex flex-col items-center gap-2">
+                  <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
+                  <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                    {history[0]}
                   </div>
-                )}
-              </div>
+                </div>
 
-              <button
-                onClick={resetGame}
-                className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
-              >
-                Play Again
-              </button>
+                <div className="text-center space-y-2">
+                  {lastWinAmount > 0 ? (
+                    <>
+                      <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
+                        YOU WON
+                      </div>
+                      <div className="text-4xl font-bold text-yellow-400">
+                        ${lastWinAmount}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
+                      YOU LOST
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={resetGame}
+                  className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
+                >
+                  Play Again
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        }
       </div>
     </div>
   );
