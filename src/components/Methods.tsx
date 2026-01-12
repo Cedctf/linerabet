@@ -86,9 +86,23 @@ export default function DynamicMethods({ isDarkMode }: DynamicMethodsProps) {
       setBlocks((prev) => [...prev, newBlock]);
       getCount();
     };
-
-    client.onNotification(handler);
-    return () => client.onNotification(() => { });
+    // Subscribe to notifications if the client supports it
+    try {
+      if (typeof (client as any).onNotification === 'function') {
+        (client as any).onNotification(handler);
+      }
+    } catch (e) {
+      console.warn("onNotification not supported:", e);
+    }
+    return () => {
+      try {
+        if (typeof (client as any).onNotification === 'function') {
+          (client as any).onNotification(() => { });
+        }
+      } catch (e) {
+        // ignore cleanup errors
+      }
+    };
   }, [chainConnected]);
 
   async function handleSetApplication() {
