@@ -6,7 +6,7 @@ import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
 import App from "./App";
 import "./index.css";
 
-const environmentId = import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID || "2762a57b-faa4-41ce-9f16-abff9300e2c9"; // Fallback ID for demo
+const environmentId = import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID || "658341ca-ee81-4763-8767-e266c3cff17c";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
