@@ -394,48 +394,61 @@ const RoulettePage = () => {
               </div>
             )}
 
-            {/* Controls BELOW the board */}
-            <div className="flex flex-col items-center gap-4 bg-green-900/50 p-6 rounded-lg border-2 border-green-700/50 w-full max-w-2xl">
-              <h3 className="text-xl font-semibold text-green-200">Select Your Chip</h3>
-              <div className="flex items-center gap-4 flex-wrap justify-center">
-                {[1, 5, 10, 25, 100].map((chipValue) => (
+            {/* Fixed Bottom Right Controls - Matching blackjack2/baccarat2 style */}
+            <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-20">
+              <div className="bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-4 items-center">
+                {/* Chip Selection */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-sm font-semibold text-white/80 text-center">Select Chip Value</div>
+                  <div className="flex items-center gap-2">
+                    {[1, 5, 10, 25, 100].map((chipValue) => (
+                      <button
+                        key={chipValue}
+                        onClick={() => setSelectedChip(chipValue)}
+                        disabled={busy || (isConnected && availableBalance < chipValue)}
+                        className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${selectedChip === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
+                      >
+                        <img
+                          src={`/Chips/chip${chipValue}.png`}
+                          alt={`$${chipValue} Chip`}
+                          className="w-12 h-12 object-contain"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-sm text-green-300 font-semibold">
+                  Total Bet: <span className="text-yellow-400">${currentTotalBet}</span>
+                </div>
+
+                {/* Action Buttons - Image based */}
+                <div className="flex gap-3 items-center">
                   <button
-                    key={chipValue}
-                    onClick={() => setSelectedChip(chipValue)}
-                    disabled={busy || (isConnected && availableBalance < chipValue)}
-                    className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${selectedChip === chipValue
-                      ? "scale-125 drop-shadow-[0_0_15px_rgba(255,215,0,0.8)]"
-                      : "hover:scale-110 hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]"
-                      } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100`}
+                    onClick={clearBet}
+                    disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0}
+                    className="hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ width: '8vw', height: '10vh' }}
                   >
                     <img
-                      src={`/Chips/chip${chipValue}.png`}
-                      alt={`$${chipValue} Chip`}
+                      src="/buttons/clear-bets.png"
+                      alt="Clear Bets"
                       className="w-full h-full object-contain"
                     />
                   </button>
-                ))}
-              </div>
-
-              <div className="text-lg text-green-300 font-semibold">
-                Total Bet: <span className="text-yellow-400">${currentTotalBet}</span>
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={clearBet}
-                  disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0}
-                  className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all shadow-lg"
-                >
-                  Clear Bets
-                </button>
-                <button
-                  onClick={spin}
-                  disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0 || busy}
-                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all shadow-xl transform hover:scale-105"
-                >
-                  {busy ? '🎰 Spinning...' : '🎰 Spin Wheel'}
-                </button>
+                  <button
+                    onClick={spin}
+                    disabled={stage !== GameStages.PLACE_BET || currentTotalBet === 0 || busy}
+                    className="hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ width: '8vw', height: '10vh' }}
+                  >
+                    <img
+                      src="/buttons/spin.png"
+                      alt="Spin Wheel"
+                      className="w-full h-full object-contain"
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
