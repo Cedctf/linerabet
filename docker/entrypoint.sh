@@ -96,16 +96,8 @@ cd /app
 npm install
 
 # ========================================
-# BUILD AND START FRONTEND
+# START FRONTEND (dev mode - lower memory usage)
 # ========================================
-# Only build if dist doesn't exist (allows downgrade after initial build)
-if [ ! -d "/app/dist" ]; then
-    echo "🔹 Building frontend for production..."
-    npm run build
-else
-    echo "✅ Using existing build (dist folder found)"
-fi
-
 echo "🔹 Starting frontend server..."
 echo "========================================"
 echo "🎰 Casino is running!"
@@ -116,5 +108,5 @@ echo "   App ID:   $APP_ID"
 echo "   Chain ID: $CHAIN_ID"
 echo "========================================"
 
-# Use preview to serve the built files (port 5173)
-npm run preview -- --host 0.0.0.0 --port 5173
+# Use dev server (works on 1GB RAM)
+npm run dev -- --host 0.0.0.0
