@@ -1,0 +1,44 @@
+services:
+  # Default: Interactive dev container - stays running for manual setup
+  linera-dev:
+    build: .
+    container_name: linera-dev
+    ports:
+      - "5173:5173"   # Frontend dev server
+      - "8080:8080"   # Linera faucet
+      - "8081:8081"   # Linera service (GraphQL)
+      - "9001:9001"   # Validator proxy
+      - "13001:13001" # Validator shard
+    volumes:
+      # Mount your code (parent directory of docker/)
+      - ..:/app
+      # Persistent Linera state - ISOLATED from host ~/.config/linera
+      - linera-data:/data/linera
+    environment:
+      - LINERA_HOME=/data/linera
+    stdin_open: true
+    tty: true
+
+  # Alternative: Auto-deploy mode (runs everything automatically)
+  linera-auto:
+    build: .
+    container_name: linera-auto
+    profiles: ["auto"]
+    ports:
+      - "5173:5173"
+      - "8080:8080"
+      - "8081:8081"
+      - "9001:9001"
+      - "13001:13001"
+    volumes:
+      - ..:/app
+      - linera-data:/data/linera
+    environment:
+      - LINERA_HOME=/data/linera
+    stdin_open: true
+    tty: true
+    command: bash /app/docker/entrypoint.sh
+
+volumes:
+  linera-data:
+    name: linera-casino-data
