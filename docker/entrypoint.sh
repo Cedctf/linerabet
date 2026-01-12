@@ -98,8 +98,13 @@ npm install
 # ========================================
 # BUILD AND START FRONTEND
 # ========================================
-echo "🔹 Building frontend for production..."
-npm run build
+# Only build if dist doesn't exist (allows downgrade after initial build)
+if [ ! -d "/app/dist" ]; then
+    echo "🔹 Building frontend for production..."
+    npm run build
+else
+    echo "✅ Using existing build (dist folder found)"
+fi
 
 echo "🔹 Starting frontend server..."
 echo "========================================"
