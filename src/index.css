@@ -1,5 +1,6 @@
-/* Import a web font */
+/* Import web fonts */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bangers&display=swap");
 
 /* Tailwind CSS v3 */
 @tailwind base;

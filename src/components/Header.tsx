@@ -8,18 +8,15 @@ function Header() {
         <div className="grid grid-cols-3 items-center">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2 w-fit">
-            <div className="w-10 h-10 rounded-lg overflow-hidden">
+            <div className="w-[240px] h-[45px] rounded-lg overflow-hidden">
               <img
-                src="/LineraBet.png"
+                src="/logo.png"
                 alt="LineraBet Logo"
-                width={40}
-                height={40}
+                width={250}
+                height={50}
                 className="object-cover"
               />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
-              LineraBet
-            </span>
           </Link>
 
           {/* Navigation - Centered */}
