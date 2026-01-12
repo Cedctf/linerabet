@@ -16,7 +16,7 @@ export const BOARD_CONFIG = {
     zeroWidth: 8,     // Width of zero cell (%)
     cellWidth: 6.25,     // Width of each number cell (%)
     cellHeight: 18.9,   // Height of each number cell (%)
-    outsideHeight: 10, // Height of outside bet rows (%)
+    outsideHeight: 16.2, // Height of outside bet rows (%)
     columnWidth: 5,   // Width of 2:1 column boxes (%)
 
     // Margins
