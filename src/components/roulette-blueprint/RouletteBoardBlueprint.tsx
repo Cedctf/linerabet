@@ -130,22 +130,6 @@ const ChipsOverlayLayer: React.FC<{ placedBets: Map<string, number> }> = ({ plac
                     height={`${chipSize}%`}
                     style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }}
                 />
-                {/* Amount text overlay */}
-                <text
-                    x={`${pos.x}%`}
-                    y={`${pos.y}%`}
-                    fill="white"
-                    fontSize="1.5%"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    style={{
-                        textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-                        pointerEvents: 'none'
-                    }}
-                >
-                    {amount}
-                </text>
             </g>
         );
     });
