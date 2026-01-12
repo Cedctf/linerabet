@@ -249,6 +249,7 @@ class Board extends React.Component<any, any> {
                                                     );
                                                     return (
                                                         <ChipComponent
+                                                            key={tdKey}
                                                             currentItemChips={currentItemChips}
                                                             tdKey={tdKey}
                                                             chipKey={chipKey}
@@ -286,6 +287,7 @@ class Board extends React.Component<any, any> {
 
                                                         return (
                                                             <ChipComponent
+                                                                key={tdKey}
                                                                 currentItemChips={currentItemChips}
                                                                 tdKey={tdKey}
                                                                 chipKey={chipKey}
