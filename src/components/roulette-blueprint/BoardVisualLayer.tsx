@@ -15,13 +15,13 @@ export const BOARD_CONFIG = {
     // Percentage-based dimensions (relative to container)
     zeroWidth: 7,     // Width of zero cell (%)
     cellWidth: 6.25,     // Width of each number cell (%)
-    cellHeight: 19.5,   // Height of each number cell (%)
+    cellHeight: 20,   // Height of each number cell (%)
     outsideHeight: 16.2, // Height of outside bet rows (%)
     columnWidth: 5,   // Width of 2:1 column boxes (%)
 
     // Margins
     gridLeft: 13,      // Left offset where number grid starts (after zero)
-    gridTop: 4.4,      // Top offset for number grid
+    gridTop: 4,      // Top offset for number grid
 };
 
 // Color scheme
@@ -52,7 +52,7 @@ const getCellCoords = (col: number, row: number) => {
     if (col === 0) {
         // Zero cell - spans all 3 rows on the left
         return {
-            x: 6,
+            x: 7.2,
             y: gridTop,
             width: zeroWidth,
             height: cellHeight * 3,
