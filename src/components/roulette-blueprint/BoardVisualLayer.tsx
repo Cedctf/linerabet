@@ -13,7 +13,7 @@ export const BOARD_CONFIG = {
     numRows: 3,     // Top row (3,6,9...), Middle (2,5,8...), Bottom (1,4,7...)
 
     // Percentage-based dimensions (relative to container)
-    zeroWidth: 8,     // Width of zero cell (%)
+    zeroWidth: 7,     // Width of zero cell (%)
     cellWidth: 6.25,     // Width of each number cell (%)
     cellHeight: 18.9,   // Height of each number cell (%)
     outsideHeight: 16.2, // Height of outside bet rows (%)
@@ -52,7 +52,7 @@ const getCellCoords = (col: number, row: number) => {
     if (col === 0) {
         // Zero cell - spans all 3 rows on the left
         return {
-            x: 0,
+            x: 6,
             y: gridTop,
             width: zeroWidth,
             height: cellHeight * 3,
@@ -74,19 +74,21 @@ interface BoardVisualLayerProps {
 }
 
 export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = false, transparent = false }) => {
-    const { gridTop, cellHeight, gridLeft, cellWidth, zeroWidth, outsideHeight, columnWidth } = BOARD_CONFIG;
+    const { gridTop, cellHeight, gridLeft, cellWidth, outsideHeight, columnWidth } = BOARD_CONFIG;
 
     // Generate number cells
     const numberCells = [];
 
     // Zero cell
+    // Zero cell
+    const zeroCoords = getCellCoords(0, 0);
     numberCells.push(
         <rect
             key="zero"
-            x="0%"
-            y={`${gridTop}%`}
-            width={`${zeroWidth}%`}
-            height={`${cellHeight * 3}%`}
+            x={`${zeroCoords.x}%`}
+            y={`${zeroCoords.y}%`}
+            width={`${zeroCoords.width}%`}
+            height={`${zeroCoords.height}%`}
             fill={transparent ? 'transparent' : COLORS.green}
             stroke={COLORS.gridLine}
             strokeWidth="1"
@@ -95,8 +97,8 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
     numberCells.push(
         <text
             key="zero-text"
-            x={`${zeroWidth / 2}%`}
-            y={`${gridTop + cellHeight * 1.5}%`}
+            x={`${zeroCoords.x + zeroCoords.width / 2}%`}
+            y={`${zeroCoords.y + zeroCoords.height / 2}%`}
             fill={COLORS.white}
             fontSize="5%"
             textAnchor="middle"
