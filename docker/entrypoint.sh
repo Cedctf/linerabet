@@ -96,7 +96,7 @@ cd /app
 npm install
 
 # ========================================
-# START FRONTEND (dev mode - lower memory usage)
+# START FRONTEND
 # ========================================
 echo "🔹 Starting frontend server..."
 echo "========================================"
@@ -108,5 +108,11 @@ echo "   App ID:   $APP_ID"
 echo "   Chain ID: $CHAIN_ID"
 echo "========================================"
 
-# Use dev server (works on 1GB RAM)
-npm run dev -- --host 0.0.0.0
+# Use pre-built dist if available, otherwise dev server
+if [ -d "/app/dist" ]; then
+    echo "✅ Using pre-built static files (faster)"
+    npm run preview -- --host 0.0.0.0 --port 5173
+else
+    echo "⚠️ No pre-built files, using dev server"
+    npm run dev -- --host 0.0.0.0
+fi
