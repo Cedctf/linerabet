@@ -291,11 +291,54 @@ export const BoardHitboxLayer: React.FC<BoardHitboxLayerProps> = ({ debug = fals
 
     // ==================== ZERO SPLITS ====================
     // ==================== ZERO SPLITS ====================
-    // Split 0-1
+    // Split 0-1 (Center of Num 1)
     hitboxes.push(
         <Hitbox
             key="split_0_1"
             id="split_0_1"
+            x={zeroCoords.x + zeroCoords.width - 1.5}
+            y={gridTop + cellHeight * 2.5 - 1.5}
+            width={3}
+            height={3}
+            debug={debug}
+            onBetSelected={onBetSelected}
+        />
+    );
+
+    // Split 0-2 (Center of Num 2)
+    hitboxes.push(
+        <Hitbox
+            key="split_0_2"
+            id="split_0_2"
+            x={zeroCoords.x + zeroCoords.width - 1.5}
+            y={gridTop + cellHeight * 1.5 - 1.5}
+            width={3}
+            height={3}
+            debug={debug}
+            onBetSelected={onBetSelected}
+        />
+    );
+
+    // Split 0-3 (Center of Num 3)
+    hitboxes.push(
+        <Hitbox
+            key="split_0_3"
+            id="split_0_3"
+            x={zeroCoords.x + zeroCoords.width - 1.5}
+            y={gridTop + cellHeight * 0.5 - 1.5}
+            width={3}
+            height={3}
+            debug={debug}
+            onBetSelected={onBetSelected}
+        />
+    );
+
+    // ==================== ZERO STREETS (Intersections) ====================
+    // Street 0-1-2 (Intersection of 0, 1, 2)
+    hitboxes.push(
+        <Hitbox
+            key="street_0_1_2"
+            id="street_0_1_2"
             x={zeroCoords.x + zeroCoords.width - 1.5}
             y={gridTop + cellHeight * 2 - 1.5}
             width={3}
@@ -305,27 +348,13 @@ export const BoardHitboxLayer: React.FC<BoardHitboxLayerProps> = ({ debug = fals
         />
     );
 
-    // Split 0-2
+    // Street 0-2-3 (Intersection of 0, 2, 3)
     hitboxes.push(
         <Hitbox
-            key="split_0_2"
-            id="split_0_2"
+            key="street_0_2_3"
+            id="street_0_2_3"
             x={zeroCoords.x + zeroCoords.width - 1.5}
             y={gridTop + cellHeight - 1.5}
-            width={3}
-            height={3}
-            debug={debug}
-            onBetSelected={onBetSelected}
-        />
-    );
-
-    // Split 0-3
-    hitboxes.push(
-        <Hitbox
-            key="split_0_3"
-            id="split_0_3"
-            x={zeroCoords.x + zeroCoords.width - 1.5}
-            y={gridTop - 1.5}
             width={3}
             height={3}
             debug={debug}
