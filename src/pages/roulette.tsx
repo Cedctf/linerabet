@@ -374,12 +374,16 @@ const RoulettePage = () => {
                     key={chipValue}
                     onClick={() => setSelectedChip(chipValue)}
                     disabled={busy || (isConnected && availableBalance < chipValue)}
-                    className={`relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg ${selectedChip === chipValue
-                      ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                      : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
-                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all ${selectedChip === chipValue
+                      ? "scale-125 drop-shadow-[0_0_15px_rgba(255,215,0,0.8)]"
+                      : "hover:scale-110 hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                      } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100`}
                   >
-                    {chipValue}
+                    <img
+                      src={`/Chips/chip${chipValue}.png`}
+                      alt={`$${chipValue} Chip`}
+                      className="w-full h-full object-contain"
+                    />
                   </button>
                 ))}
               </div>
@@ -425,8 +429,12 @@ const RoulettePage = () => {
                   {Array.from(placedBets.entries()).map(([betId, amount]) => (
                     <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
                       {/* Visual chip */}
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-xs font-bold shadow-md">
-                        {amount}
+                      <div className="w-8 h-8 flex items-center justify-center">
+                        <img
+                          src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`} // Fallback to 1 if amount isn't a standard chip (though logic sums them, so this is just a visual rep)
+                          alt="chip"
+                          className="w-full h-full object-contain"
+                        />
                       </div>
                       <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
                     </div>
