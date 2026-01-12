@@ -19,14 +19,11 @@ interface RouletteBoardBlueprintProps {
 
 // Helper to get center position for a bet
 const getBetCenterPosition = (betId: string): { x: number; y: number } | null => {
-    const { gridTop, cellHeight, gridLeft, cellWidth, zeroWidth, outsideHeight } = BOARD_CONFIG;
+    const { gridTop, cellHeight, gridLeft, cellWidth, outsideHeight } = BOARD_CONFIG;
 
     // Straight-up bets (num_0, num_1, etc.)
     if (betId.startsWith('num_')) {
         const num = parseInt(betId.replace('num_', ''));
-        if (num === 0) {
-            return { x: zeroWidth / 2, y: gridTop + cellHeight * 1.5 };
-        }
         const { col, row } = getNumberPosition(num);
         const { x, y, width, height } = getCellCoords(col, row);
         return { x: x + width / 2, y: y + height / 2 };
@@ -59,13 +56,7 @@ const getBetCenterPosition = (betId: string): { x: number; y: number } | null =>
     // Split bets - position at the edge between numbers
     if (betId.startsWith('split_')) {
         const nums = betId.replace('split_', '').split('_').map(Number);
-        if (nums[0] === 0) {
-            // Zero splits
-            if (nums[1] === 1) return { x: zeroWidth, y: gridTop + cellHeight * 2.5 };
-            if (nums[1] === 2) return { x: zeroWidth, y: gridTop + cellHeight * 1.5 };
-            if (nums[1] === 3) return { x: zeroWidth, y: gridTop + cellHeight * 0.5 };
-        }
-        // Regular splits - average the positions
+        // Regular splits - average the positions (works for 0-1, 0-2, 0-3 too)
         const pos1 = getNumberPosition(nums[0]);
         const pos2 = getNumberPosition(nums[1]);
         const c1 = getCellCoords(pos1.col, pos1.row);
@@ -76,6 +67,21 @@ const getBetCenterPosition = (betId: string): { x: number; y: number } | null =>
     // Street bets
     if (betId.startsWith('street_')) {
         const nums = betId.replace('street_', '').split('_').map(Number);
+
+        // Zero streets (0-1-2 and 0-2-3)
+        if (nums[0] === 0) {
+            // 0-1-2: Intersection of 0, 1, 2
+            if (nums[1] === 1 && nums[2] === 2) {
+                const pos1 = getCellCoords(1, 1); // Num 1
+                return { x: pos1.x, y: pos1.y }; // Top-left of Num 1 is the intersection
+            }
+            // 0-2-3: Intersection of 0, 2, 3
+            if (nums[1] === 2 && nums[2] === 3) {
+                const pos2 = getCellCoords(1, 2); // Num 2
+                return { x: pos2.x, y: pos2.y }; // Top-left of Num 2 is the intersection
+            }
+        }
+
         const col = Math.ceil(nums[0] / 3);
         const pos = getCellCoords(col, 2); // Middle of the street
         return { x: pos.x + pos.width / 2, y: pos.y + pos.height / 2 };

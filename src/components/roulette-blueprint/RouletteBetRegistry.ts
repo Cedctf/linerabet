@@ -54,6 +54,9 @@ export const BET_REGISTRY: Record<string, BetPayload> = {
             ];
         })
     ),
+    // Zero streets (Basket/Trio)
+    street_0_1_2: { type: 'street', numbers: [0, 1, 2], label: '0-1-2', payout: 11 },
+    street_0_2_3: { type: 'street', numbers: [0, 2, 3], label: '0-2-3', payout: 11 },
 
     // ==================== CORNER BETS (8:1) ====================
     // Corners at intersections of 4 numbers
