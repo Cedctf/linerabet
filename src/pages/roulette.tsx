@@ -7,7 +7,7 @@ import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import { BLACK_NUMBERS, WHEEL_NUMBERS } from "@/lib/roulette-utils";
-import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout } from "../components/roulette-blueprint";
+import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout, BoardVisualLayer } from "../components/roulette-blueprint";
 import type { BetPayload } from "../components/roulette-blueprint";
 
 
@@ -415,11 +415,20 @@ const RoulettePage = () => {
 
           {/* New SVG-based Board with hitboxes - FULL WIDTH */}
           <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
-            <RouletteBoardBlueprint
-              debug={false}
-              onBetSelected={handleBetSelected}
-              placedBets={placedBets}
-            />
+            <div style={{
+              backgroundImage: 'url(/src/components/roulette/assets/Board.png)',
+              backgroundSize: '100% 100%',
+              backgroundRepeat: 'no-repeat',
+              borderRadius: '8px',
+              position: 'relative'
+            }}>
+              <RouletteBoardBlueprint
+                debug={false}
+                onBetSelected={handleBetSelected}
+                placedBets={placedBets}
+                customVisualLayer={<BoardVisualLayer transparent />}
+              />
+            </div>
 
             {/* Placed Bets Summary - Visual Chips */}
             {placedBets.size > 0 && (

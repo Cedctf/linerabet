@@ -70,9 +70,10 @@ const getCellCoords = (col: number, row: number) => {
 
 interface BoardVisualLayerProps {
     debug?: boolean;
+    transparent?: boolean;
 }
 
-export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = false }) => {
+export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = false, transparent = false }) => {
     const { gridTop, cellHeight, gridLeft, cellWidth, zeroWidth, outsideHeight, columnWidth } = BOARD_CONFIG;
 
     // Generate number cells
@@ -86,7 +87,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
             y={`${gridTop}%`}
             width={`${zeroWidth}%`}
             height={`${cellHeight * 3}%`}
-            fill={COLORS.green}
+            fill={transparent ? 'transparent' : COLORS.green}
             stroke={COLORS.gridLine}
             strokeWidth="1"
         />
@@ -119,7 +120,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 y={`${y}%`}
                 width={`${width}%`}
                 height={`${height}%`}
-                fill={isRed ? COLORS.red : COLORS.black}
+                fill={transparent ? 'transparent' : (isRed ? COLORS.red : COLORS.black)}
                 stroke={COLORS.gridLine}
                 strokeWidth="1"
             />
@@ -150,7 +151,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                     y={`${y}%`}
                     width={`${columnWidth}%`}
                     height={`${cellHeight}%`}
-                    fill={COLORS.green}
+                    fill={transparent ? 'transparent' : COLORS.green}
                     stroke={COLORS.gridLine}
                     strokeWidth="1"
                 />
@@ -182,7 +183,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 y={`${dozenY}%`}
                 width={`${dozenWidth}%`}
                 height={`${outsideHeight}%`}
-                fill={COLORS.green}
+                fill={transparent ? 'transparent' : COLORS.green}
                 stroke={COLORS.gridLine}
                 strokeWidth="1"
             />
@@ -217,7 +218,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 y={`${evenMoneyY}%`}
                 width={`${evenMoneyWidth}%`}
                 height={`${outsideHeight}%`}
-                fill={bet.fill}
+                fill={transparent ? 'transparent' : bet.fill}
                 stroke={COLORS.gridLine}
                 strokeWidth="1"
             />
@@ -237,7 +238,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
     return (
         <g className="board-visual-layer">
             {/* Background */}
-            <rect x="0" y="0" width="100%" height="100%" fill={COLORS.green} rx="1%" />
+            <rect x="0" y="0" width="100%" height="100%" fill={transparent ? 'transparent' : COLORS.green} rx="1%" />
 
             {/* Number grid */}
             {numberCells}
