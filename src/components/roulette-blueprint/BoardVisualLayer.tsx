@@ -14,14 +14,14 @@ export const BOARD_CONFIG = {
 
     // Percentage-based dimensions (relative to container)
     zeroWidth: 8,     // Width of zero cell (%)
-    cellWidth: 7,     // Width of each number cell (%)
-    cellHeight: 18,   // Height of each number cell (%)
+    cellWidth: 6.25,     // Width of each number cell (%)
+    cellHeight: 18.9,   // Height of each number cell (%)
     outsideHeight: 10, // Height of outside bet rows (%)
     columnWidth: 5,   // Width of 2:1 column boxes (%)
 
     // Margins
-    gridLeft: 8,      // Left offset where number grid starts (after zero)
-    gridTop: 10,      // Top offset for number grid
+    gridLeft: 13,      // Left offset where number grid starts (after zero)
+    gridTop: 6,      // Top offset for number grid
 };
 
 // Color scheme
