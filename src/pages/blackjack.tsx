@@ -599,12 +599,11 @@ export default function Blackjack() {
                     ))}
                     {phase === "PlayerTurn" && dealerHand.length === 1 && (
                       <div className="transform hover:scale-105 transition-transform">
-                        <div
-                          className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 border-2 border-blue-700 rounded-lg shadow-xl flex items-center justify-center"
-                          style={{ width: 90, height: 126 }}
-                        >
-                          <div className="text-blue-400 text-4xl font-bold opacity-50">?</div>
-                        </div>
+                        <CardComp
+                          hidden
+                          width={90}
+                          height={126}
+                        />
                       </div>
                     )}
                   </>
