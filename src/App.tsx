@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Home, Blackjack, Blackjack2, Baccarat, Baccarat2, Roulette, Games } from './pages';
+import RouletteBlueprintDemo from './pages/roulette-blueprint';
 import Layout from './components/Layout';
 import "./App.css";
 
@@ -18,6 +19,7 @@ function App() {
             <Route path="/blackjack2" element={<Blackjack2 />} />
             <Route path="/baccarat" element={<Baccarat />} />
             <Route path="/roulette" element={<Roulette />} />
+            <Route path="/roulette-blueprint" element={<RouletteBlueprintDemo />} />
           </Route>
         </Routes>
       </Router>
@@ -26,3 +28,4 @@ function App() {
 }
 
 export default App;
+

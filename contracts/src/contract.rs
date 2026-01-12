@@ -3,15 +3,14 @@
 mod state;
 
 use linera_sdk::{
-    ensure,
     linera_base_types::WithContractAbi,
     views::{RootView, View},
     Contract, ContractRuntime,
 };
 
-use contracts::{BlackjackInit, Operation, RouletteBet, RouletteBetType, BaccaratBetType};
+use contracts::{CasinoParams, CasinoInit, Operation, Message, GameType, GameAction, GameResult, Card, RouletteBet, RouletteBetType};
 
-use self::state::{Card, ContractsState, PlayerStateView, GamePhase, GameRecord, GameResult, RouletteRecord, BaccaratRecord, ALLOWED_BETS};
+use self::state::{ContractsState, PendingGame, ActiveGame, GamePhase, GameRecord, PendingRouletteGame, ALLOWED_BETS};
 
 const SUITS: [&str; 4] = ["clubs", "diamonds", "hearts", "spades"];
 const VALUES: [&str; 13] = [
@@ -30,9 +29,9 @@ impl WithContractAbi for ContractsContract {
 }
 
 impl Contract for ContractsContract {
-    type Message = ();
-    type Parameters = ();
-    type InstantiationArgument = BlackjackInit;
+    type Message = Message;
+    type Parameters = CasinoParams;  // Application Parameters with bank_chain_id
+    type InstantiationArgument = CasinoInit;
     type EventValue = ();
 
     async fn load(runtime: ContractRuntime<Self>) -> Self {
@@ -43,12 +42,11 @@ impl Contract for ContractsContract {
     }
 
     async fn instantiate(&mut self, argument: Self::InstantiationArgument) {
-        self.runtime.application_parameters();
+        // Validate parameters are set
+        let _params = self.runtime.application_parameters();
 
-        let starting_balance = argument.starting_balance;
-        self.state.default_buy_in.set(starting_balance);
+        self.state.default_buy_in.set(argument.starting_balance);
         
-        // Set master seed
         let master_seed = if argument.random_seed == 0 {
             0x9e3779b185ebca87
         } else {
@@ -56,480 +54,729 @@ impl Contract for ContractsContract {
         };
         self.state.master_seed.set(master_seed);
         
-        // Set deployer address
-        let signer = self.runtime.authenticated_signer().expect("User must be signed in to instantiate");
-        self.state.deployer.set(Some(signer));
+        // If this chain IS the bank (chain_id == params.bank_chain_id), init house
+        if self.is_bank_chain() {
+            self.state.house_balance.set(100000); // 100k chips for house
+            self.state.game_counter.set(0);
+        }
     }
 
     async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Response {
-        let signer = self.runtime.authenticated_signer().expect("User must be signed in");
-        let default_buy_in = *self.state.default_buy_in.get();
-        let master_seed = *self.state.master_seed.get();
+        let signer = self.runtime.authenticated_signer().expect("Must be signed in");
         
-        let player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
-        
-        // Initialize player if needed
-        if *player.random_seed.get() == 0 {
-            player.player_balance.set(default_buy_in);
-            // Mix master seed with signer to get unique seed
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            use std::hash::{Hash, Hasher};
-            master_seed.hash(&mut hasher);
-            signer.hash(&mut hasher);
-            player.random_seed.set(hasher.finish());
-            player.phase.set(GamePhase::WaitingForBet);
-        }
-
         match operation {
-            Operation::Reset => {
-                if let Err(e) = Self::reset(player) {
-                    panic!("{}", e);
-                }
-            }
-            Operation::StartGame { bet } => {
-                if let Err(e) = Self::start_game(player, &mut self.runtime, bet) {
-                    panic!("{}", e);
-                }
-            }
-            Operation::Hit => {
-                if let Err(e) = Self::hit(player, &mut self.runtime) {
-                    panic!("{}", e);
-                }
-            }
-            Operation::Stand => {
-                if let Err(e) = Self::stand(player, &mut self.runtime) {
-                    panic!("{}", e);
-                }
-            }
             Operation::RequestChips => {
-                let player = self.state.players.load_entry_mut(&signer).await.expect("Failed to load player");
-                // Add 100 chips to existing balance
-                let current_balance = *player.player_balance.get();
-                player.player_balance.set(current_balance.saturating_add(100)); 
-                // Also ensure phase is reset if they were stuck
-                if *player.player_balance.get() > 0 && *player.phase.get() == GamePhase::RoundComplete {
-                     player.phase.set(GamePhase::WaitingForBet);
-                }
+                self.handle_request_chips(signer).await;
             }
-            Operation::SpinRoulette { bets } => {
-                if let Err(e) = Self::spin_roulette(player, &mut self.runtime, bets) {
-                    panic!("{}", e);
-                }
+            
+            Operation::PlayBlackjack { bet } => {
+                self.handle_play_blackjack(signer, bet).await;
             }
-            Operation::PlayBaccarat { amount, bet_type } => {
-                if let Err(e) = Self::play_baccarat(player, &mut self.runtime, amount, bet_type) {
-                    panic!("{}", e);
-                }
+            
+            Operation::Hit => {
+                self.handle_hit(signer).await;
+            }
+            
+            Operation::Stand => {
+                self.handle_stand(signer).await;
+            }
+            
+            Operation::DoubleDown => {
+                self.handle_double_down(signer).await;
+            }
+
+            Operation::PlayRoulette { bets } => {
+                self.handle_play_roulette(signer, bets).await;
+            }
+
+            Operation::ReportRouletteResult { game_id, claimed_outcome } => {
+                self.handle_report_roulette_result(signer, game_id, claimed_outcome).await;
             }
         }
-        Self::Response::default()
     }
-    
 
-    async fn execute_message(&mut self, _message: Self::Message) {}
+    async fn execute_message(&mut self, message: Self::Message) {
+        match message {
+            // ═══════════════════════════════════════════════════════════════
+            // BANK RECEIVES FROM PLAYER
+            // ═══════════════════════════════════════════════════════════════
+            
+            Message::RequestChips { player, player_chain } => {
+                self.bank_handle_request_chips(player, player_chain).await;
+            }
+            
+            Message::RequestGame { player, player_chain, game_type, bet } => {
+                self.bank_handle_request_game(player, player_chain, game_type, bet).await;
+            }
+            
+            Message::ReportResult { game_id, player, actions } => {
+                self.bank_handle_report_result(game_id, player, actions).await;
+            }
+
+            Message::RequestRouletteGame { player, player_chain, bets } => {
+                self.bank_handle_request_roulette(player, player_chain, bets).await;
+            }
+
+            Message::ReportRouletteResult { game_id, claimed_outcome } => {
+                self.bank_handle_report_roulette_result(game_id, claimed_outcome).await;
+            }
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PLAYER RECEIVES FROM BANK
+            // ═══════════════════════════════════════════════════════════════
+            
+            Message::ChipsGranted { player: _, amount } => {
+                self.player_handle_chips_granted(amount).await;
+            }
+            
+            Message::GameReady { game_id, seed, bet } => {
+                self.player_handle_game_ready(game_id, seed, bet).await;
+            }
+            
+            Message::GameSettled { game_id, result, payout, dealer_hand } => {
+                self.player_handle_game_settled(game_id, result, payout, dealer_hand).await;
+            }
+
+            Message::RouletteGameReady { game_id, seed, bets } => {
+                self.player_handle_roulette_ready(game_id, seed, bets).await;
+            }
+
+            Message::RouletteSettled { game_id, outcome, payout, bets } => {
+                self.player_handle_roulette_settled(game_id, outcome, payout, bets).await;
+            }
+        }
+    }
 
     async fn store(mut self) {
         self.state.save().await.expect("Failed to save state");
     }
 }
 
-const BLACK_NUMBERS: [u8; 18] = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+// ============================================================================
+// HELPER: Check if this chain is the Bank
+// ============================================================================
 
 impl ContractsContract {
-    fn spin_roulette(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, bets: Vec<RouletteBet>) -> Result<(), String> {
-        let mut total_bet: u64 = 0;
-        for bet in &bets {
-            total_bet = total_bet.saturating_add(bet.amount);
-            if bet.bet_type == RouletteBetType::Number {
-                ensure!(bet.number.is_some(), "Number bet must specify a number");
-                let n = bet.number.unwrap();
-                ensure!(n <= 36, "Invalid number bet");
-            }
-        }
-        ensure!(total_bet > 0, "Total bet must be positive");
-        let balance = *player.player_balance.get();
-        ensure!(balance >= total_bet, "Insufficient balance");
+    /// Returns true if the current chain is the Bank chain
+    fn is_bank_chain(&mut self) -> bool {
+        let params = self.runtime.application_parameters();
+        let current_chain = self.runtime.chain_id();
+        current_chain == params.bank_chain_id
+    }
+    
+    /// Get the bank chain ID from application parameters
+    fn bank_chain_id(&mut self) -> linera_base::identifiers::ChainId {
+        self.runtime.application_parameters().bank_chain_id
+    }
+}
 
-        // Deduct
-        player.player_balance.set(balance - total_bet);
+// ============================================================================
+// PLAYER-SIDE OPERATION HANDLERS
+// ============================================================================
 
-        // Spin
-        let mut rng = SimpleRng::new(Self::bump_seed(player));
-        let winning_number = (rng.next() % 37) as u8;
-
-        // Calculate payout
-        let mut total_payout: u64 = 0;
-        let is_black = BLACK_NUMBERS.contains(&winning_number);
-
-        for bet in &bets {
-            let win = match bet.bet_type {
-                RouletteBetType::Number => {
-                    if let Some(n) = bet.number {
-                        n == winning_number
-                    } else {
-                        false
-                    }
-                },
-                RouletteBetType::Red => winning_number != 0 && !is_black,
-                RouletteBetType::Black => is_black,
-                RouletteBetType::Even => winning_number != 0 && winning_number % 2 == 0,
-                RouletteBetType::Odd => winning_number != 0 && winning_number % 2 != 0,
-                RouletteBetType::Low => winning_number >= 1 && winning_number <= 18,
-                RouletteBetType::High => winning_number >= 19 && winning_number <= 36,
-            };
-            
-            if win {
-                let multiplier = match bet.bet_type {
-                    RouletteBetType::Number => 36, // 35:1 + 1 (return stake)
-                    RouletteBetType::Red | RouletteBetType::Black | RouletteBetType::Even | 
-                    RouletteBetType::Odd | RouletteBetType::Low | RouletteBetType::High => 2,
-                };
-                total_payout = total_payout.saturating_add(bet.amount.saturating_mul(multiplier));
-            }
-        }
-
-        // Update balance
-        let new_balance = *player.player_balance.get();
-        player.player_balance.set(new_balance.saturating_add(total_payout));
-        player.last_roulette_outcome.set(Some(winning_number));
-
-        // History
-        let now_timestamp = runtime.system_time();
-        let now_micros = now_timestamp.micros();
+impl ContractsContract {
+    /// Player requests chips - sends message to Bank
+    async fn handle_request_chips(&mut self, signer: linera_base::identifiers::AccountOwner) {
+        let bank_chain_id = self.bank_chain_id();
+        let player_chain = self.runtime.chain_id();
         
-        player.roulette_history.push(RouletteRecord {
-            winning_number,
-            total_bet,
-            payout: total_payout,
-            timestamp: now_micros,
-        });
-
-        Ok(())
+        self.runtime
+            .prepare_message(Message::RequestChips {
+                player: signer,
+                player_chain,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+    
+    /// Player starts a Blackjack game - deducts bet and sends to Bank
+    async fn handle_play_blackjack(&mut self, signer: linera_base::identifiers::AccountOwner, bet: u64) {
+        assert!(ALLOWED_BETS.contains(&bet), "Bet must be 1, 2, 3, 4, or 5");
+        
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= bet, "Insufficient balance");
+        
+        // Check no active game
+        assert!(self.state.current_game.get().is_none(), "Game already in progress");
+        
+        // Deduct bet (escrow)
+        self.state.player_balance.set(balance - bet);
+        
+        // Send request to Bank
+        let bank_chain_id = self.bank_chain_id();
+        let player_chain = self.runtime.chain_id();
+        
+        self.runtime
+            .prepare_message(Message::RequestGame {
+                player: signer,
+                player_chain,
+                game_type: GameType::Blackjack,
+                bet,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+    
+    /// Player hits - local computation
+    async fn handle_hit(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        
+        // Draw a card
+        let card = game.deck.pop().expect("Deck empty");
+        game.player_hand.push(card);
+        game.actions.push(GameAction::Hit);
+        
+        let player_value = calculate_hand_value(&game.player_hand);
+        
+        if player_value > 21 {
+            // Bust - report to Bank immediately
+            game.phase = GamePhase::RoundComplete;
+            self.state.current_game.set(Some(game.clone()));
+            
+            // Send result to Bank
+            let bank_chain_id = self.bank_chain_id();
+            let player = self.runtime.authenticated_signer().expect("Must be signed");
+            
+            self.runtime
+                .prepare_message(Message::ReportResult {
+                    game_id: game.game_id,
+                    player,
+                    actions: game.actions.clone(),
+                })
+                .with_tracking()
+                .send_to(bank_chain_id);
+        } else {
+            self.state.current_game.set(Some(game));
+        }
+    }
+    
+    /// Player stands - report to Bank for verification
+    async fn handle_stand(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        
+        game.actions.push(GameAction::Stand);
+        game.phase = GamePhase::RoundComplete;
+        self.state.current_game.set(Some(game.clone()));
+        
+        // Send result to Bank for verification
+        let bank_chain_id = self.bank_chain_id();
+        let player = self.runtime.authenticated_signer().expect("Must be signed");
+        
+        self.runtime
+            .prepare_message(Message::ReportResult {
+                game_id: game.game_id,
+                player,
+                actions: game.actions.clone(),
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+    
+    /// Player doubles down - double bet, draw one card, then stand
+    /// Only allowed on first 2 cards
+    async fn handle_double_down(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        assert!(game.player_hand.len() == 2, "Double down only allowed on first 2 cards");
+        
+        // Check if player has enough balance to double
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= game.bet, "Insufficient balance to double");
+        
+        // Deduct the additional bet
+        self.state.player_balance.set(balance - game.bet);
+        game.bet = game.bet * 2; // Double the bet
+        
+        // Draw exactly one card
+        let card = game.deck.pop().expect("Deck empty");
+        game.player_hand.push(card);
+        
+        game.actions.push(GameAction::DoubleDown);
+        game.phase = GamePhase::RoundComplete;
+        self.state.current_game.set(Some(game.clone()));
+        
+        // Send result to Bank for verification
+        let bank_chain_id = self.bank_chain_id();
+        let player = self.runtime.authenticated_signer().expect("Must be signed");
+        
+        self.runtime
+            .prepare_message(Message::ReportResult {
+                game_id: game.game_id,
+                player,
+                actions: game.actions.clone(),
+            })
+            .send_to(bank_chain_id);
     }
 
-    // Reset game to WaitingForBet
-    fn reset(player: &mut PlayerStateView) -> Result<(), String> {
-        let phase = *player.phase.get();
-        ensure!(
-            matches!(phase, GamePhase::WaitingForBet | GamePhase::RoundComplete),
-            "Cannot reset during active game"
-        );
-
-        player.phase.set(GamePhase::WaitingForBet);
-
-        // Clear previous round data
-        player.deck.set(Vec::new());
-        player.player_hand.set(Vec::new());
-        player.dealer_hand.set(Vec::new());
-        player.dealer_hole_card.set(None);
-        player.current_bet.set(0);
-
-        Ok(())
+    /// Player starts a Roulette game - deducts total bet and sends to Bank
+    async fn handle_play_roulette(&mut self, signer: linera_base::identifiers::AccountOwner, bets: Vec<RouletteBet>) {
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= total_bet, "Insufficient balance");
+        
+        // Deduct bet (escrow)
+        self.state.player_balance.set(balance - total_bet);
+        
+        // Send request to Bank
+        let bank_chain_id = self.bank_chain_id();
+        let player_chain = self.runtime.chain_id();
+        
+        self.runtime
+            .prepare_message(Message::RequestRouletteGame {
+                player: signer,
+                player_chain,
+                bets,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
     }
+}
 
-    // Start game - lock in bet and deal cards
-    fn start_game(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, bet: u64) -> Result<(), String> {
-        ensure!(ALLOWED_BETS.contains(&bet), "Bet must be one of 1,2,3,4,5");
-        let phase = *player.phase.get();
-        ensure!(
-            matches!(phase, GamePhase::WaitingForBet | GamePhase::BettingPhase | GamePhase::RoundComplete),
-            "Cannot start game during active round"
-        );
+// ============================================================================
+// PLAYER-SIDE MESSAGE HANDLERS
+// ============================================================================
 
-        let balance = *player.player_balance.get();
-        ensure!(balance >= bet, "Insufficient balance to place bet");
-
-        // Deal cards
-        let mut deck = Self::new_shuffled_deck(player);
-        let player_card1 = draw_card(&mut deck);
-        let player_card2 = draw_card(&mut deck);
-        let dealer_up_card = draw_card(&mut deck);
-        let dealer_hole_card = draw_card(&mut deck);
-
+impl ContractsContract {
+    /// Player receives chips from Bank
+    async fn player_handle_chips_granted(&mut self, amount: u64) {
+        let balance = *self.state.player_balance.get();
+        self.state.player_balance.set(balance + amount);
+    }
+    
+    /// Player receives game seed from Bank - deal cards and start playing
+    async fn player_handle_game_ready(&mut self, game_id: u64, seed: u64, bet: u64) {
+        // Create shuffled deck using the seed
+        let mut deck = create_deck();
+        shuffle(&mut deck, seed);
+        
+        // Deal initial cards
+        let player_card1 = deck.pop().unwrap();
+        let player_card2 = deck.pop().unwrap();
+        let dealer_up = deck.pop().unwrap();
+        let dealer_hole = deck.pop().unwrap();
+        
         let player_hand = vec![player_card1, player_card2];
-
-        // Store hole card separately (hidden from service until dealer turn)
-        player.dealer_hole_card.set(Some(dealer_hole_card));
-        // Only show dealer's up card
-        player.dealer_hand.set(vec![dealer_up_card.clone()]);
-
-        player.player_balance.set(balance - bet);
-        player.current_bet.set(bet);
-        player.deck.set(deck);
-        player.player_hand.set(player_hand.clone());
-        player.last_result.set(None);
-
-        // Check for instant blackjack (player only, dealer hidden)
+        let dealer_hand = vec![dealer_up]; // Only show up card
+        
+        let mut phase = GamePhase::PlayerTurn;
+        let mut actions = Vec::new();
+        
+        // Check for instant blackjack
         let player_value = calculate_hand_value(&player_hand);
         if player_value == 21 {
-            // Player has blackjack - reveal dealer card and resolve
-            Self::reveal_dealer_hole_card(player);
-            let full_dealer_hand = player.dealer_hand.get().clone();
-            let dealer_value = calculate_hand_value(&full_dealer_hand);
-            if dealer_value == 21 {
-                Self::apply_result(player, runtime, GameResult::Push);
-            } else {
-                Self::apply_result(player, runtime, GameResult::PlayerBlackjack);
-            }
-        } else {
-            player.phase.set(GamePhase::PlayerTurn);
+            // Blackjack! Auto-stand and report
+            phase = GamePhase::RoundComplete;
+            actions.push(GameAction::Stand);
         }
-
-        Ok(())
-    }
-
-    // Hit - player draws a card
-    fn hit(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Result<(), String> {
-        ensure!(
-            matches!(*player.phase.get(), GamePhase::PlayerTurn),
-            "You can only hit during the player's turn"
-        );
-
-
-
-        let mut deck = player.deck.get().clone();
-        ensure!(!deck.is_empty(), "The shoe is exhausted");
-        let mut player_hand = player.player_hand.get().clone();
-        player_hand.push(draw_card(&mut deck));
-
-        player.deck.set(deck);
-        player.player_hand.set(player_hand.clone());
-
-
-
-        if calculate_hand_value(&player_hand) > 21 {
-            // Reveal dealer's hole card before ending round
-            Self::reveal_dealer_hole_card(player);
-            Self::apply_result(player, runtime, GameResult::PlayerBust);
-        }
-
-        Ok(())
-    }
-
-    // Stand - reveal hole card and dealer plays
-    fn stand(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>) -> Result<(), String> {
-        ensure!(
-            matches!(*player.phase.get(), GamePhase::PlayerTurn),
-            "You can only stand during the player's turn"
-        );
-
-
-        player.phase.set(GamePhase::DealerTurn);
-
-        // Reveal the dealer's hole card
-        Self::reveal_dealer_hole_card(player);
-
-        let mut deck = player.deck.get().clone();
-        let mut dealer_hand = player.dealer_hand.get().clone();
-
-        // Dealer hits until 17 or higher
-        while calculate_hand_value(&dealer_hand) < 17 {
-            ensure!(!deck.is_empty(), "The shoe is exhausted");
-            dealer_hand.push(draw_card(&mut deck));
-        }
-
-        player.deck.set(deck);
-        player.dealer_hand.set(dealer_hand.clone());
-
-        let player_hand = player.player_hand.get().clone();
-        let result = determine_winner(&player_hand, &dealer_hand);
-        Self::apply_result(player, runtime, result);
-
-        Ok(())
-    }
-
-    // Helper to reveal dealer's hole card
-    fn reveal_dealer_hole_card(player: &mut PlayerStateView) {
-        if let Some(hole_card) = player.dealer_hole_card.get().clone() {
-            let mut dealer_hand = player.dealer_hand.get().clone();
-            dealer_hand.push(hole_card);
-            player.dealer_hand.set(dealer_hand);
-            player.dealer_hole_card.set(None);
-        }
-    }
-
-    fn apply_result(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, result: GameResult) {
-        let bet = *player.current_bet.get();
-        let balance = *player.player_balance.get();
-
-        // Calculate payout
-        let payout = match result {
-            GameResult::PlayerBlackjack => {
-                // 1.5x payout for blackjack (bet * 2.5 total = bet + bet * 1.5)
-                bet.saturating_mul(5).saturating_div(2)
-            }
-            GameResult::PlayerWin | GameResult::DealerBust => {
-                // Regular win - double the bet
-                bet.saturating_mul(2)
-            }
-            GameResult::Push => {
-                // Push - return the bet
-                bet
-            }
-            GameResult::DealerWin | GameResult::PlayerBust => {
-                // Loss - no payout
-                0
-            }
-        };
-
-        let updated_balance = balance.saturating_add(payout);
-
-        // Record game in history
-        let now_timestamp = runtime.system_time();
-        let now_micros = now_timestamp.micros();
-        let record = GameRecord {
-            player_hand: player.player_hand.get().clone(),
-            dealer_hand: player.dealer_hand.get().clone(),
+        
+        let game = ActiveGame {
+            game_id,
+            seed,
             bet,
-            result,
-            payout,
-            timestamp: now_micros,
+            game_type: GameType::Blackjack,
+            phase,
+            player_hand,
+            dealer_hand,
+            dealer_hole_card: Some(dealer_hole),
+            deck,
+            actions: actions.clone(),
         };
-        player.game_history.push(record);
-
-        player.player_balance.set(updated_balance);
-        player.current_bet.set(0);
-        player.phase.set(GamePhase::RoundComplete);
-        player.last_result.set(Some(result));
-        player.last_result.set(Some(result));
+        
+        self.state.current_game.set(Some(game.clone()));
+        
+        // If blackjack, auto-report
+        if phase == GamePhase::RoundComplete {
+            let bank_chain_id = self.bank_chain_id();
+            if let Some(player) = self.runtime.authenticated_signer() {
+                self.runtime
+                    .prepare_message(Message::ReportResult {
+                        game_id,
+                        player,
+                        actions,
+                    })
+                    .with_tracking()
+                    .send_to(bank_chain_id);
+            }
+        }
+    }
+    
+    /// Player receives game result from Bank
+    async fn player_handle_game_settled(&mut self, game_id: u64, result: GameResult, payout: u64, dealer_hand: Vec<Card>) {
+        // Credit payout to player
+        let balance = *self.state.player_balance.get();
+        self.state.player_balance.set(balance + payout);
+        
+        // Record in history
+        if let Some(game) = self.state.current_game.get().clone() {
+            if game.game_id == game_id {
+                let now = self.runtime.system_time().micros();
+                
+                let record = GameRecord {
+                    game_id,
+                    game_type: game.game_type,
+                    player_hand: game.player_hand.clone(),
+                    dealer_hand: dealer_hand, // Use full dealer hand from Bank
+                    bet: game.bet,
+                    result,
+                    payout,
+                    timestamp: now,
+                    roulette_bets: None,
+                    roulette_outcome: None,
+                };
+                self.state.game_history.push(record);
+            }
+        }
+        
+        // Clear current game
+        self.state.current_game.set(None);
     }
 
-    fn new_shuffled_deck(player: &mut PlayerStateView) -> Vec<Card> {
+    /// Player receives roulette seed from Bank - calculate outcome locally
+    async fn player_handle_roulette_ready(&mut self, game_id: u64, seed: u64, bets: Vec<RouletteBet>) {
+        // Calculate outcome locally using same RNG as bank
+        let mut rng = SimpleRng::new(seed);
+        let outcome = (rng.next() % 37) as u8;
+        
+        // Store pending roulette game for UI to query
+        let pending = PendingRouletteGame {
+            game_id,
+            seed,
+            bets: bets.clone(),
+            outcome,
+        };
+        self.state.pending_roulette.set(Some(pending));
+        
+        // Send verification to bank (bank has player info stored from RequestRouletteGame)
+        let bank_chain_id = self.bank_chain_id();
+        
+        self.runtime
+            .prepare_message(Message::ReportRouletteResult {
+                game_id,
+                claimed_outcome: outcome,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+
+    /// Player sends roulette result to bank for verification (called by operation if auto-send fails)
+    async fn handle_report_roulette_result(&mut self, _signer: linera_base::identifiers::AccountOwner, game_id: u64, claimed_outcome: u8) {
+        // Get pending roulette game
+        let pending = self.state.pending_roulette.get().clone()
+            .expect("No pending roulette game");
+        assert!(pending.game_id == game_id, "Game ID mismatch");
+        assert!(pending.outcome == claimed_outcome, "Outcome mismatch");
+        
+        // Send to bank
+        let bank_chain_id = self.bank_chain_id();
+        
+        self.runtime
+            .prepare_message(Message::ReportRouletteResult {
+                game_id,
+                claimed_outcome,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+
+    /// Player receives roulette settlement from Bank
+    async fn player_handle_roulette_settled(&mut self, game_id: u64, outcome: u8, payout: u64, bets: Vec<RouletteBet>) {
+        // Credit payout to player
+        let balance = *self.state.player_balance.get();
+        self.state.player_balance.set(balance + payout);
+        
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        let now = self.runtime.system_time().micros();
+        
+        // Record in history
+        let record = GameRecord {
+            game_id,
+            game_type: GameType::Roulette,
+            player_hand: vec![],
+            dealer_hand: vec![],
+            bet: total_bet,
+            result: if payout > 0 { GameResult::PlayerWin } else { GameResult::DealerWin },
+            payout,
+            timestamp: now,
+            roulette_bets: Some(bets),
+            roulette_outcome: Some(outcome),
+        };
+        self.state.game_history.push(record);
+        
+        // Clear pending roulette
+        self.state.pending_roulette.set(None);
+    }
+}
+
+// ============================================================================
+// BANK-SIDE MESSAGE HANDLERS
+// ============================================================================
+
+impl ContractsContract {
+    /// Bank grants chips to player
+    async fn bank_handle_request_chips(&mut self, player: linera_base::identifiers::AccountOwner, player_chain: linera_base::identifiers::ChainId) {
+        let amount = *self.state.default_buy_in.get();
+        
+        // Send chips to player
+        self.runtime
+            .prepare_message(Message::ChipsGranted { player, amount })
+            .with_tracking()
+            .send_to(player_chain);
+    }
+    
+    /// Bank receives game request - generate seed and store pending game
+    async fn bank_handle_request_game(
+        &mut self,
+        player: linera_base::identifiers::AccountOwner,
+        player_chain: linera_base::identifiers::ChainId,
+        game_type: GameType,
+        bet: u64,
+    ) {
+        // Generate unique game ID
+        let game_id = *self.state.game_counter.get();
+        self.state.game_counter.set(game_id + 1);
+        
+        // Generate deterministic seed using master seed + game_id + player + TIMESTAMP
+        let master_seed = *self.state.master_seed.get();
+        let now = self.runtime.system_time().micros();
+        let seed = generate_game_seed(master_seed, game_id, &player, now);
+        
+        // Store pending game
+        let pending = PendingGame {
+            player,
+            player_chain,
+            game_type,
+            bet,
+            seed,
+            created_at: now,
+        };
+        self.state.pending_games.insert(&game_id, pending).expect("Failed to insert pending game");
+        
+        // Send seed to player
+        self.runtime
+            .prepare_message(Message::GameReady { game_id, seed, bet })
+            .with_tracking()
+            .send_to(player_chain);
+    }
+    
+    /// Bank receives result - verify and settle
+    async fn bank_handle_report_result(
+        &mut self,
+        game_id: u64,
+        player: linera_base::identifiers::AccountOwner,
+        actions: Vec<GameAction>,
+    ) {
+        // Get pending game
+        let pending = self.state.pending_games.get(&game_id).await
+            .expect("Failed to get pending game")
+            .expect("Game not found");
+        
+        assert!(pending.player == player, "Not your game");
+        
+        // Replay game deterministically
+        let (result, payout, dealer_hand) = self.replay_and_verify(&pending, &actions);
+        
+        // Update house balance
+        let house = *self.state.house_balance.get();
+        if payout > pending.bet {
+            // House pays winnings
+            self.state.house_balance.set(house.saturating_sub(payout - pending.bet));
+        } else {
+            // House keeps loss
+            self.state.house_balance.set(house + (pending.bet - payout));
+        }
+        
+        // Remove pending game
+        self.state.pending_games.remove(&game_id).expect("Failed to remove pending game");
+        
+        // Send result to player (including full dealer hand)
+        self.runtime
+            .prepare_message(Message::GameSettled { game_id, result, payout, dealer_hand })
+            .with_tracking()
+            .send_to(pending.player_chain);
+    }
+
+    /// Bank receives roulette game request - generate seed and send back
+    async fn bank_handle_request_roulette(
+        &mut self,
+        player: linera_base::identifiers::AccountOwner,
+        player_chain: linera_base::identifiers::ChainId,
+        bets: Vec<RouletteBet>,
+    ) {
+        // Generate unique game ID
+        let game_id = *self.state.game_counter.get();
+        self.state.game_counter.set(game_id + 1);
+        
+        // Generate seed for this game
+        let master_seed = *self.state.master_seed.get();
+        let now = self.runtime.system_time().micros();
+        let seed = generate_game_seed(master_seed, game_id, &player, now);
+        
+        // Store pending game
+        self.state.pending_games.insert(&game_id, PendingGame {
+            player,
+            player_chain,
+            game_type: GameType::Roulette,
+            bet: bets.iter().map(|b| b.amount).sum(),
+            seed,
+            created_at: now,
+        }).expect("Failed to insert pending game");
+        
+        // Store bets separately for payout calculation
+        self.state.pending_roulette_bets.insert(&game_id, bets.clone())
+            .expect("Failed to insert pending bets");
+        
+        // Send seed to player (player will calculate outcome locally)
+        self.runtime
+            .prepare_message(Message::RouletteGameReady { 
+                game_id, 
+                seed, 
+                bets 
+            })
+            .with_tracking()
+            .send_to(player_chain);
+    }
+
+    /// Bank verifies and settles roulette game
+    async fn bank_handle_report_roulette_result(
+        &mut self,
+        game_id: u64,
+        claimed_outcome: u8,
+    ) {
+        // Get pending game
+        let pending = self.state.pending_games.get(&game_id).await
+            .expect("Failed to get pending game")
+            .expect("Game not found");
+        
+        // Game_id is unique and already tied to the player from RequestRouletteGame
+        
+        // Verify outcome
+        let mut rng = SimpleRng::new(pending.seed);
+        let expected_outcome = (rng.next() % 37) as u8;
+        assert!(claimed_outcome == expected_outcome, "Outcome verification failed");
+        
+        // Get stored bets
+        let bets = self.state.pending_roulette_bets.get(&game_id).await
+            .expect("Failed to get bets")
+            .expect("Bets not found");
+        
+        // Calculate payout using actual bets
+        let payout = calculate_roulette_payout(&bets, expected_outcome);
+        let total_bet: u64 = bets.iter().map(|b| b.amount).sum();
+        
+        // Update house balance
+        let house = *self.state.house_balance.get();
+        if payout > total_bet {
+            self.state.house_balance.set(house.saturating_sub(payout - total_bet));
+        } else {
+            self.state.house_balance.set(house + (total_bet - payout));
+        }
+        
+        // Remove pending game and bets
+        self.state.pending_games.remove(&game_id).expect("Failed to remove pending game");
+        self.state.pending_roulette_bets.remove(&game_id).expect("Failed to remove pending bets");
+        
+        // Send settlement to player
+        self.runtime
+            .prepare_message(Message::RouletteSettled { 
+                game_id, 
+                outcome: expected_outcome, 
+                payout,
+                bets,
+            })
+            .with_tracking()
+            .send_to(pending.player_chain);
+    }
+    
+    /// Replay game with given seed and actions, return result, payout, and dealer hand
+    fn replay_and_verify(&self, pending: &PendingGame, actions: &[GameAction]) -> (GameResult, u64, Vec<Card>) {
+        // Recreate deck with same seed
         let mut deck = create_deck();
-        let seed = Self::bump_seed(player);
-        shuffle(&mut deck, seed);
-        deck
-    }
-
-    fn bump_seed(player: &mut PlayerStateView) -> u64 {
-        let current = *player.random_seed.get();
-        let mut rng = SimpleRng::new(current);
-        let next = rng.next();
-        player.random_seed.set(next);
-        next
-    }
-
-    fn play_baccarat(player: &mut PlayerStateView, runtime: &mut ContractRuntime<Self>, amount: u64, bet_type: BaccaratBetType) -> Result<(), String> {
-        ensure!(ALLOWED_BETS.contains(&amount), "Invalid bet amount");
-        let balance = *player.player_balance.get();
-        ensure!(balance >= amount, "Insufficient balance");
-
-        // Deduct bet
-        player.player_balance.set(balance - amount);
-
-        // Deal
-        let mut deck = Self::new_shuffled_deck(player);
-        let p1 = draw_card(&mut deck);
-        let b1 = draw_card(&mut deck);
-        let p2 = draw_card(&mut deck);
-        let b2 = draw_card(&mut deck);
-
-        let mut p_hand = vec![p1, p2];
-        let mut b_hand = vec![b1, b2];
-
-        let p_initial = baccarat_score(&p_hand);
-        let b_initial = baccarat_score(&b_hand);
-
-        let mut is_natural = false;
-        if p_initial >= 8 || b_initial >= 8 {
-            is_natural = true;
-        } else {
-            // Player draw rule
-            let mut p_3rd_val: Option<u8> = None;
-            if p_initial <= 5 {
-                let c = draw_card(&mut deck);
-                p_3rd_val = Some(baccarat_card_value(&c));
-                p_hand.push(c);
-            }
-
-            // Banker draw rule
-            let b_draws = if let Some(p3) = p_3rd_val {
-                // Player drew
-                match b_initial {
-                    0..=2 => true,
-                    3 => p3 != 8,
-                    4 => (2..=7).contains(&p3),
-                    5 => (4..=7).contains(&p3),
-                    6 => (6..=7).contains(&p3),
-                    _ => false,
+        shuffle(&mut deck, pending.seed);
+        
+        // Deal initial cards (same order as player)
+        let player_card1 = deck.pop().unwrap();
+        let player_card2 = deck.pop().unwrap();
+        let dealer_up = deck.pop().unwrap();
+        let dealer_hole = deck.pop().unwrap();
+        
+        let mut player_hand = vec![player_card1, player_card2];
+        let mut dealer_hand = vec![dealer_up, dealer_hole];
+        
+        // Replay player actions
+        let mut doubled = false;
+        for action in actions {
+            match action {
+                GameAction::Hit => {
+                    let card = deck.pop().expect("Deck empty during replay");
+                    player_hand.push(card);
                 }
+                GameAction::Stand => {
+                    break; // Stop drawing
+                }
+                GameAction::DoubleDown => {
+                    // Double down: draw one card, then stop
+                    let card = deck.pop().expect("Deck empty during replay");
+                    player_hand.push(card);
+                    doubled = true;
+                    break;
+                }
+            }
+        }
+        
+        // Adjust bet if doubled
+        let final_bet = if doubled { pending.bet * 2 } else { pending.bet };
+        
+        let player_value = calculate_hand_value(&player_hand);
+        
+        // Check player bust
+        if player_value > 21 {
+            return (GameResult::PlayerBust, 0, dealer_hand);
+        }
+        
+        // Check player blackjack
+        if player_value == 21 && player_hand.len() == 2 {
+            let dealer_value = calculate_hand_value(&dealer_hand);
+            if dealer_value == 21 {
+                return (GameResult::Push, pending.bet, dealer_hand); // Push
             } else {
-                // Player stood
-                b_initial <= 5
-            };
-
-            if b_draws {
-                b_hand.push(draw_card(&mut deck));
+                // Blackjack pays 3:2
+                return (GameResult::PlayerBlackjack, pending.bet * 5 / 2, dealer_hand);
             }
         }
-
-        let p_final = baccarat_score(&p_hand);
-        let b_final = baccarat_score(&b_hand);
-
-        let winner = if p_final > b_final {
-            BaccaratBetType::Player
-        } else if b_final > p_final {
-            BaccaratBetType::Banker
+        
+        // Dealer plays (hits until 17+)
+        while calculate_hand_value(&dealer_hand) < 17 {
+            let card = deck.pop().expect("Deck empty during dealer turn");
+            dealer_hand.push(card);
+        }
+        
+        let dealer_value = calculate_hand_value(&dealer_hand);
+        
+        // Determine result (use final_bet for doubled bets)
+        if dealer_value > 21 {
+            (GameResult::DealerBust, final_bet * 2, dealer_hand)
+        } else if player_value > dealer_value {
+            (GameResult::PlayerWin, final_bet * 2, dealer_hand)
+        } else if dealer_value > player_value {
+            (GameResult::DealerWin, 0, dealer_hand)
         } else {
-            BaccaratBetType::Tie
-        };
-
-        let mut payout: u64 = 0;
-
-        if bet_type == winner {
-            match bet_type {
-                BaccaratBetType::Player => payout = amount * 2,
-                BaccaratBetType::Tie => payout = amount * 9, // 8:1 payout = 9x return
-                BaccaratBetType::Banker => {
-                    // 0.95 * amount + amount = 1.95 * amount
-                    // u64 math: (amount * 195) / 100
-                    payout = (amount as u128 * 195 / 100) as u64;
-                }
-            }
-        } else if winner == BaccaratBetType::Tie && bet_type != BaccaratBetType::Tie {
-            // Push on tie if you didn't bet on tie
-            payout = amount; 
+            (GameResult::Push, final_bet, dealer_hand) // Push - return bet
         }
-
-        player.player_balance.set(*player.player_balance.get() + payout);
-
-        // Record History
-        let now_timestamp = runtime.system_time();
-        let record = BaccaratRecord {
-            player_hand: p_hand,
-            banker_hand: b_hand,
-            bet: amount,
-            bet_type,
-            winner,
-            payout,
-            timestamp: now_timestamp.micros(),
-            player_score: p_final,
-            banker_score: b_final,
-            is_natural,
-        };
-
-        player.baccarat_history.push(record.clone());
-        player.last_baccarat_outcome.set(Some(record));
-
-        Ok(())
     }
 }
 
-fn baccarat_card_value(card: &Card) -> u8 {
-    match card.value.as_str() {
-        "10" | "jack" | "queen" | "king" => 0,
-        "ace" => 1,
-        v => v.parse().unwrap_or(0),
-    }
-}
-
-fn baccarat_score(hand: &[Card]) -> u8 {
-    let sum: u32 = hand.iter().map(|c| baccarat_card_value(c) as u32).sum();
-    (sum % 10) as u8
-}
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 fn create_deck() -> Vec<Card> {
-    let mut deck = Vec::with_capacity(SUITS.len() * VALUES.len());
+    let mut deck = Vec::with_capacity(52);
     for suit in SUITS {
         for value in VALUES {
             deck.push(Card::new(suit, value));
@@ -546,8 +793,14 @@ fn shuffle(deck: &mut [Card], seed: u64) {
     }
 }
 
-fn draw_card(deck: &mut Vec<Card>) -> Card {
-    deck.pop().expect("deck should contain enough cards")
+fn generate_game_seed(master_seed: u64, game_id: u64, player: &linera_base::identifiers::AccountOwner, timestamp: u64) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    master_seed.hash(&mut hasher);
+    game_id.hash(&mut hasher);
+    player.hash(&mut hasher);
+    timestamp.hash(&mut hasher); // Mix in the timestamp
+    hasher.finish()
 }
 
 fn calculate_hand_value(cards: &[Card]) -> u8 {
@@ -562,9 +815,7 @@ fn calculate_hand_value(cards: &[Card]) -> u8 {
             }
             "king" | "queen" | "jack" => total = total.saturating_add(10),
             value => {
-                let parsed = value
-                    .parse::<u8>()
-                    .unwrap_or_else(|_| panic!("invalid card value {value}"));
+                let parsed = value.parse::<u8>().unwrap_or(0);
                 total = total.saturating_add(parsed);
             }
         }
@@ -578,23 +829,67 @@ fn calculate_hand_value(cards: &[Card]) -> u8 {
     total
 }
 
-fn determine_winner(player_hand: &[Card], dealer_hand: &[Card]) -> GameResult {
-    let player_value = calculate_hand_value(player_hand);
-    let dealer_value = calculate_hand_value(dealer_hand);
-    let player_bust = player_value > 21;
-    let dealer_bust = dealer_value > 21;
-
-    if player_bust {
-        GameResult::PlayerBust
-    } else if dealer_bust {
-        GameResult::DealerBust
-    } else if player_value > dealer_value {
-        GameResult::PlayerWin
-    } else if dealer_value > player_value {
-        GameResult::DealerWin
-    } else {
-        GameResult::Push
+fn calculate_roulette_payout(bets: &[RouletteBet], outcome: u8) -> u64 {
+    let mut payout = 0;
+    for bet in bets {
+        let win = match bet.bet_type {
+            RouletteBetType::Number => bet.number == Some(outcome),
+            RouletteBetType::Split => {
+                // Check if outcome is in the numbers array
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Street => {
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Corner => {
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Line => {
+                // Line bet: 6 numbers (2 adjacent streets)
+                bet.numbers.as_ref().map_or(false, |nums| nums.contains(&outcome))
+            },
+            RouletteBetType::Basket => {
+                // First Four: 0, 1, 2, 3
+                outcome == 0 || outcome == 1 || outcome == 2 || outcome == 3
+            },
+            RouletteBetType::Red => {
+                let red_numbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+                red_numbers.contains(&outcome)
+            },
+            RouletteBetType::Black => {
+                let black_numbers = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+                black_numbers.contains(&outcome)
+            },
+            RouletteBetType::Even => outcome != 0 && outcome % 2 == 0,
+            RouletteBetType::Odd => outcome != 0 && outcome % 2 != 0,
+            RouletteBetType::Low => outcome >= 1 && outcome <= 18,
+            RouletteBetType::High => outcome >= 19 && outcome <= 36,
+            RouletteBetType::Dozen1 => outcome >= 1 && outcome <= 12,
+            RouletteBetType::Dozen2 => outcome >= 13 && outcome <= 24,
+            RouletteBetType::Dozen3 => outcome >= 25 && outcome <= 36,
+            RouletteBetType::Column1 => outcome != 0 && outcome % 3 == 0,  // 3,6,9,12,15,18,21,24,27,30,33,36
+            RouletteBetType::Column2 => outcome != 0 && outcome % 3 == 2,  // 2,5,8,11,14,17,20,23,26,29,32,35
+            RouletteBetType::Column3 => outcome != 0 && outcome % 3 == 1,  // 1,4,7,10,13,16,19,22,25,28,31,34
+        };
+        
+        if win {
+            let multiplier = match bet.bet_type {
+                RouletteBetType::Number => 36,   // 35:1
+                RouletteBetType::Split => 18,    // 17:1
+                RouletteBetType::Street => 12,   // 11:1
+                RouletteBetType::Corner => 9,    // 8:1
+                RouletteBetType::Line => 6,      // 5:1
+                RouletteBetType::Basket => 7,    // 6:1
+                RouletteBetType::Dozen1 | RouletteBetType::Dozen2 | RouletteBetType::Dozen3 => 3, // 2:1
+                RouletteBetType::Column1 | RouletteBetType::Column2 | RouletteBetType::Column3 => 3, // 2:1
+                RouletteBetType::Red | RouletteBetType::Black | 
+                RouletteBetType::Even | RouletteBetType::Odd | 
+                RouletteBetType::Low | RouletteBetType::High => 2, // 1:1
+            };
+            payout += bet.amount * multiplier;
+        }
     }
+    payout
 }
 
 struct SimpleRng(u64);
@@ -613,9 +908,4 @@ impl SimpleRng {
         self.0 = value;
         self.0
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // Tests removed for brevity as they need significant refactoring for MapView
 }
