@@ -4,6 +4,7 @@ import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import CardComp from "../components/Card";
+import Header from "../components/Header";
 
 // Types
 type BaccaratBetType = "PLAYER" | "BANKER" | "TIE";
@@ -63,6 +64,7 @@ export default function BaccaratPage() {
     const [lastOutcome, setLastOutcome] = useState<BaccaratRecord | null>(null);
     const [history, setHistory] = useState<BaccaratRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [showPopup, setShowPopup] = useState(false);
 
     const allowedBets = [1, 2, 3, 4, 5];
 
@@ -126,6 +128,10 @@ export default function BaccaratPage() {
                         setLastSeenGameId(latestGame.gameId);
                         setBusy(false);
                         void refreshData();
+                        // Show popup after 1 second delay so player can see the cards
+                        setTimeout(() => {
+                            setShowPopup(true);
+                        }, 1000);
                     }
                 } else if (mappedHistory.length > 0 && lastSeenGameId === -1) {
                     // Initialize last seen on first load
@@ -164,6 +170,7 @@ export default function BaccaratPage() {
         setBusy(true);
         setPhase("Playing");
         setLastOutcome(null);
+        setShowPopup(false);
 
         try {
             const mutation = `mutation { playBaccarat(amount: ${betAmount}, betType: ${betType}) }`;
@@ -178,154 +185,157 @@ export default function BaccaratPage() {
     };
 
     return (
-        <div className="min-h-screen bg-black text-white overflow-hidden relative font-sans">
+        <div className="h-screen bg-black text-white overflow-hidden relative font-sans">
             {/* Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-900 to-green-950 opacity-90" />
-            <div
-                className="absolute inset-0 opacity-10"
-                style={{
-                    backgroundImage:
-                        "linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)",
-                    backgroundSize: "50px 50px",
-                }}
-            />
-            <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
-            <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
+            <div className="absolute inset-0 bg-[url('/baccarat-desk.png')] bg-cover bg-center" />
 
-            <div className="relative z-10 flex flex-col items-center justify-start min-h-screen py-8 px-4 pt-28">
-                {/* Header */}
-                <div className="relative w-full max-w-4xl mb-8 flex justify-center items-center">
-                    <h1 className="text-5xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent drop-shadow-sm">
-                        Baccarat
-                    </h1>
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center gap-2"
-                    >
-                        📜 History ({history.length})
-                    </button>
-                </div>
+            <div className="relative z-10 flex flex-col items-center justify-center h-full py-4 px-4">
+                <Header />
 
-                {/* Chip Selection - Top */}
-                <div className="bg-black/40 p-6 rounded-xl border border-white/10 w-full max-w-3xl backdrop-blur-sm shadow-md mb-8 flex flex-col items-center">
-                    <h3 className="text-red-200 font-semibold uppercase tracking-wider text-sm mb-4">Select Chip Value</h3>
-                    <div className="flex items-center gap-4 flex-wrap justify-center">
-                        {allowedBets.map((chipValue) => (
-                            <button
-                                key={chipValue}
-                                onClick={() => setBetAmount(chipValue)}
-                                disabled={busy || balance < chipValue}
-                                className={`relative w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-lg transition-all shadow-lg ${betAmount === chipValue
-                                    ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                                    : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
-                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
-                            >
-                                {chipValue}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                {/* History Button - Bottom Left Corner (always visible) */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+                    style={{ width: '8vw', height: '18vh' }}
+                >
+                    <img
+                        src="/buttons/history.png"
+                        alt="History"
+                        className="w-full h-full object-contain group-hover:hidden"
+                    />
+                    <img
+                        src="/animations/history.gif"
+                        alt="History"
+                        className="w-full h-full object-contain hidden group-hover:block"
+                    />
+                </button>
 
-                {/* Game Area */}
-                <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                    {/* Player Hand */}
-                    <div className="col-span-1 bg-blue-900/30 p-6 rounded-xl border-2 border-blue-500/30 flex flex-col items-center">
-                        <h2 className="text-2xl font-bold text-blue-400 mb-4">PLAYER</h2>
-                        <div className="flex gap-2 min-h-[140px] items-center justify-center flex-wrap">
-                            {lastOutcome ? (
-                                lastOutcome.playerHand.map((c, i) => (
-                                    <div key={i} className="transform hover:scale-105 transition-transform">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-blue-300/50">Waiting...</div>
-                            )}
+                {/* Bottom Right Controls - Combined */}
+                <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-50">
+                    {/* Main Control Panel */}
+                    <div className="bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-4 items-center">
+
+                        {/* Chip Selection */}
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="text-sm font-semibold text-white/80 text-center">Select Chip Value</div>
+                            <div className="flex items-center gap-2">
+                                {allowedBets.map((chipValue) => (
+                                    <button
+                                        key={chipValue}
+                                        onClick={() => setBetAmount(chipValue)}
+                                        disabled={busy || balance < chipValue}
+                                        className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${betAmount === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
+                                    >
+                                        <img
+                                            src={`/Chips/chip${chipValue}.png`}
+                                            alt={`$${chipValue} Chip`}
+                                            className="w-12 h-12 object-contain"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        {lastOutcome && <div className="text-4xl font-bold mt-4 text-white">{lastOutcome.playerScore}</div>}
-                    </div>
 
-                    {/* Betting Controls (Center) */}
-                    <div className="col-span-1 flex flex-col items-center justify-center gap-6">
-                        <div className="flex flex-col w-full gap-4">
+                        {/* Betting Buttons - Images */}
+                        <div className="flex flex-row gap-3 w-full justify-center items-center">
                             <button
                                 onClick={() => setBetType("PLAYER")}
-                                className={`p-4 rounded-xl border-2 font-bold text-xl transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/20 border-blue-800 hover:bg-blue-900/40"}`}
+                                className={`transition-all hover:scale-105 ${betType === "PLAYER" ? "scale-110 drop-shadow-[0_0_15px_rgba(37,99,235,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET PLAYER (1:1)
+                                <img src="/buttons/player.png" alt="Bet Player" className="w-32 object-contain" />
                             </button>
                             <button
                                 onClick={() => setBetType("TIE")}
-                                className={`p-4 rounded-xl border-2 font-bold text-xl transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/20 border-green-800 hover:bg-green-900/40"}`}
+                                className={`transition-all hover:scale-105 ${betType === "TIE" ? "scale-110 drop-shadow-[0_0_15px_rgba(22,163,74,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET TIE (8:1)
+                                <img src="/buttons/tie.png" alt="Bet Tie" className="w-32 object-contain" />
                             </button>
                             <button
                                 onClick={() => setBetType("BANKER")}
-                                className={`p-4 rounded-xl border-2 font-bold text-xl transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/20 border-red-800 hover:bg-red-900/40"}`}
+                                className={`transition-all hover:scale-105 ${betType === "BANKER" ? "scale-110 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]" : "opacity-80 hover:opacity-100"}`}
                             >
-                                BET BANKER (0.95:1)
+                                <img src="/buttons/banker.png" alt="Bet Banker" className="w-32 object-contain" />
                             </button>
                         </div>
 
-                        <div className="text-xl font-mono text-yellow-400 mt-4">
-                            Bet: {betAmount} Chips
-                        </div>
-
+                        {/* Deal Button */}
                         <button
                             onClick={placeBet}
                             disabled={busy || !!lastOutcome}
-                            className="w-full py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-2xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full mt-2 hover:scale-105 transition-all flex justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {busy ? "DEALING..." : phase === "RoundComplete" ? "Result Above" : "DEAL"}
+                            <img
+                                src="/deal.png"
+                                alt="Deal"
+                                className="h-16 object-contain drop-shadow-lg"
+                            />
                         </button>
-                    </div>
-
-                    {/* Banker Hand */}
-                    <div className="col-span-1 bg-red-900/30 p-6 rounded-xl border-2 border-red-500/30 flex flex-col items-center">
-                        <h2 className="text-2xl font-bold text-red-400 mb-4">BANKER</h2>
-                        <div className="flex gap-2 min-h-[140px] items-center justify-center flex-wrap">
-                            {lastOutcome ? (
-                                lastOutcome.bankerHand.map((c, i) => (
-                                    <div key={i} className="transform hover:scale-105 transition-transform">
-                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={80} height={112} />
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-red-300/50">Waiting...</div>
-                            )}
-                        </div>
-                        {lastOutcome && <div className="text-4xl font-bold mt-4 text-white">{lastOutcome.bankerScore}</div>}
                     </div>
                 </div>
 
-                {/* Outcome Message & Controls */}
-                {lastOutcome ? (
-                    <div className="flex flex-col items-center gap-6 mb-8 w-full max-w-lg mx-auto bg-green-900/50 p-6 rounded-xl border border-green-500/30 backdrop-blur-sm">
-                        <div className="text-center animate-bounce">
-                            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 drop-shadow-sm uppercase">
-                                {lastOutcome.winner} WINS
-                            </div>
-                            {lastOutcome.payout > 0 ? (
-                                <div className="text-2xl text-green-400 font-bold mt-2">
-                                    You Won {lastOutcome.payout} Chips!
-                                </div>
-                            ) : (
-                                <div className="text-2xl text-red-400 font-bold mt-2">
-                                    You Lost {lastOutcome.bet} Chips
-                                </div>
+                {/* Game Area - Absolute Positioning for Manual Placement */}
+                <div className="absolute inset-0 pointer-events-none">
+                    {/* Player Hand */}
+                    <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-[25%] md:translate-x-0 md:top-[35%] pointer-events-auto flex flex-col items-center transition-all duration-300">
+                        <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
+                            {lastOutcome && (
+                                lastOutcome.playerHand.map((c, i) => (
+                                    <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={typeof window !== 'undefined' && window.innerWidth < 768 ? 60 : 80} height={typeof window !== 'undefined' && window.innerWidth < 768 ? 84 : 112} />
+                                    </div>
+                                ))
                             )}
                         </div>
-
-                        <button
-                            onClick={() => { setLastOutcome(null); setPhase("WaitingForGame"); }}
-                            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-lg shadow-lg text-xl transform hover:scale-105 transition-all w-full"
-                        >
-                            Play Again
-                        </button>
+                        {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.playerScore}</div>}
                     </div>
-                ) : (
-                    <div className="h-24"></div>
+
+                    {/* Banker Hand */}
+                    <div className="absolute top-[55%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-auto md:right-[25%] md:translate-x-0 md:top-[35%] pointer-events-auto flex flex-col items-center transition-all duration-300">
+                        <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
+                            {lastOutcome && (
+                                lastOutcome.bankerHand.map((c, i) => (
+                                    <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
+                                        <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={typeof window !== 'undefined' && window.innerWidth < 768 ? 60 : 80} height={typeof window !== 'undefined' && window.innerWidth < 768 ? 84 : 112} />
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.bankerScore}</div>}
+                    </div>
+                </div>
+
+                {/* Result Popup with Try Again - Center */}
+                {showPopup && lastOutcome && (
+                    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+                        <div className="relative">
+                            {/* Win/Lose Image */}
+                            <img
+                                src={
+                                    lastOutcome.payout > 0
+                                        ? "/animations/win.png"
+                                        : "/animations/lose.png"
+                                }
+                                alt={lastOutcome.payout > 0 ? "You Win!" : "You Lose"}
+                                className="max-w-[50vw] max-h-[60vh] object-contain"
+                            />
+                            {/* Try Again Button - Overlaid at bottom of image */}
+                            <button
+                                onClick={() => {
+                                    setShowPopup(false);
+                                    setLastOutcome(null);
+                                    setPhase("WaitingForGame");
+                                }}
+                                className="absolute bottom-[5%] left-1/2 -translate-x-1/2 hover:scale-110 transition-transform"
+                                style={{ width: '15vw', height: '12vh' }}
+                            >
+                                <img
+                                    src="/buttons/try-again.png"
+                                    alt="Play Again"
+                                    className="w-full h-full object-contain"
+                                />
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
 
