@@ -174,8 +174,7 @@ export const RouletteBoardBlueprint: React.FC<RouletteBoardBlueprintProps> = ({
                 preserveAspectRatio="xMidYMid meet"
                 style={{
                     width: '100%',
-                    minHeight: '400px',
-                    height: 'auto',
+                    aspectRatio: '100 / 38.5',
                     display: 'block',
                     borderRadius: '8px',
                 }}
