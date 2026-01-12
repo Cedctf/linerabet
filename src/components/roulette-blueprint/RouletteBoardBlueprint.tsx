@@ -100,6 +100,15 @@ const getBetCenterPosition = (betId: string): { x: number; y: number } | null =>
     return null;
 };
 
+// Chip value to image mapping
+const getChipImage = (amount: number): string => {
+    if (amount >= 100) return '/Chips/chip100.png';
+    if (amount >= 25) return '/Chips/chip25.png';
+    if (amount >= 10) return '/Chips/chip10.png';
+    if (amount >= 5) return '/Chips/chip5.png';
+    return '/Chips/chip1.png';
+};
+
 // Chips Overlay Layer
 const ChipsOverlayLayer: React.FC<{ placedBets: Map<string, number> }> = ({ placedBets }) => {
     const chips: JSX.Element[] = [];
@@ -108,28 +117,32 @@ const ChipsOverlayLayer: React.FC<{ placedBets: Map<string, number> }> = ({ plac
         const pos = getBetCenterPosition(betId);
         if (!pos) return;
 
+        const chipImage = getChipImage(amount);
+        const chipSize = 9; // Size in %
+
         chips.push(
             <g key={`chip_${betId}`}>
-                {/* Chip circle */}
-                <circle
-                    cx={`${pos.x}%`}
-                    cy={`${pos.y}%`}
-                    r="2%"
-                    fill="url(#chipGradient)"
-                    stroke="white"
-                    strokeWidth="0.3"
-                    filter="drop-shadow(0 1px 2px rgba(0,0,0,0.5))"
+                <image
+                    href={chipImage}
+                    x={`${pos.x - chipSize / 2}%`}
+                    y={`${pos.y - chipSize / 2}%`}
+                    width={`${chipSize}%`}
+                    height={`${chipSize}%`}
+                    style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }}
                 />
-                {/* Amount text */}
+                {/* Amount text overlay */}
                 <text
                     x={`${pos.x}%`}
                     y={`${pos.y}%`}
                     fill="white"
-                    fontSize="1.8%"
+                    fontSize="1.5%"
                     fontWeight="bold"
                     textAnchor="middle"
                     dominantBaseline="central"
-                    pointerEvents="none"
+                    style={{
+                        textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                        pointerEvents: 'none'
+                    }}
                 >
                     {amount}
                 </text>
@@ -139,13 +152,6 @@ const ChipsOverlayLayer: React.FC<{ placedBets: Map<string, number> }> = ({ plac
 
     return (
         <g className="chips-overlay-layer">
-            {/* Chip gradient definition */}
-            <defs>
-                <radialGradient id="chipGradient" cx="30%" cy="30%">
-                    <stop offset="0%" stopColor="#ff6b6b" />
-                    <stop offset="100%" stopColor="#c92a2a" />
-                </radialGradient>
-            </defs>
             {chips}
         </g>
     );
