@@ -8,7 +8,7 @@ use linera_sdk::{
     Contract, ContractRuntime,
 };
 
-use contracts::{CasinoParams, CasinoInit, Operation, Message, GameType, GameAction, GameResult, Card, RouletteBet, RouletteBetType};
+use contracts::{CasinoParams, CasinoInit, Operation, Message, GameType, GameAction, GameResult, Card, RouletteBet, RouletteBetType, BaccaratBetType};
 
 use self::state::{ContractsState, PendingGame, ActiveGame, GamePhase, GameRecord, PendingRouletteGame, ALLOWED_BETS};
 
@@ -92,6 +92,12 @@ impl Contract for ContractsContract {
             Operation::ReportRouletteResult { game_id, claimed_outcome } => {
                 self.handle_report_roulette_result(signer, game_id, claimed_outcome).await;
             }
+
+            Operation::PlayBaccarat { amount, bet_type } => {
+                self.handle_play_baccarat(signer, amount, bet_type).await;
+            }
+
+
         }
     }
 
@@ -120,6 +126,12 @@ impl Contract for ContractsContract {
             Message::ReportRouletteResult { game_id, claimed_outcome } => {
                 self.bank_handle_report_roulette_result(game_id, claimed_outcome).await;
             }
+
+            Message::RequestBaccaratGame { player, player_chain, amount, bet_type } => {
+                self.bank_handle_request_baccarat(player, player_chain, amount, bet_type).await;
+            }
+
+
             
             // ═══════════════════════════════════════════════════════════════
             // PLAYER RECEIVES FROM BANK
@@ -143,6 +155,22 @@ impl Contract for ContractsContract {
 
             Message::RouletteSettled { game_id, outcome, payout, bets } => {
                 self.player_handle_roulette_settled(game_id, outcome, payout, bets).await;
+            }
+
+
+
+            Message::BaccaratSettled { 
+                game_id, 
+                winner, 
+                payout, 
+                player_hand, 
+                banker_hand, 
+                player_score, 
+                banker_score,
+                bet_amount,
+                bet_type
+            } => {
+                self.player_handle_baccarat_settled(game_id, winner, payout, player_hand, banker_hand, player_score, banker_score, bet_amount, bet_type).await;
             }
         }
     }
@@ -428,6 +456,8 @@ impl ContractsContract {
                     timestamp: now,
                     roulette_bets: None,
                     roulette_outcome: None,
+                    baccarat_winner: None,
+                    baccarat_bet: None,
                 };
                 self.state.game_history.push(record);
             }
@@ -505,12 +535,85 @@ impl ContractsContract {
             timestamp: now,
             roulette_bets: Some(bets),
             roulette_outcome: Some(outcome),
+            baccarat_winner: None,
+            baccarat_bet: None,
         };
         self.state.game_history.push(record);
         
         // Clear pending roulette
         self.state.pending_roulette.set(None);
     }
+
+    /// Player starts a Baccarat game - deducts bet and sends to Bank
+    async fn handle_play_baccarat(&mut self, signer: linera_base::identifiers::AccountOwner, amount: u64, bet_type: BaccaratBetType) {
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= amount, "Insufficient balance");
+        
+        // Deduct bet (escrow)
+        self.state.player_balance.set(balance - amount);
+        
+        let bank_chain_id = self.bank_chain_id();
+        let player_chain = self.runtime.chain_id();
+        
+        self.runtime
+            .prepare_message(Message::RequestBaccaratGame {
+                player: signer,
+                player_chain,
+                amount,
+                bet_type,
+            })
+            .with_tracking()
+            .send_to(bank_chain_id);
+    }
+    
+    /// Player receives Baccarat seed from Bank
+    /// Player receives Baccarat seed from Bank (Legacy/Unused - Baccarat is now Bank-Authoritative)
+    /// This is removed as part of the refactor.
+
+    
+    /// Player receives Baccarat settlement from Bank
+    async fn player_handle_baccarat_settled(
+        &mut self,
+        game_id: u64,
+        winner: BaccaratBetType,
+        payout: u64,
+        player_hand: Vec<Card>,
+        banker_hand: Vec<Card>,
+        _player_score: u8,
+        _banker_score: u8,
+        bet_amount: u64,
+        bet_type: BaccaratBetType,
+    ) {
+        // Credit payout
+        let balance = *self.state.player_balance.get();
+        self.state.player_balance.set(balance + payout);
+        
+        let result = match winner {
+            BaccaratBetType::Player => GameResult::PlayerWin, // Approximate mapping
+            BaccaratBetType::Banker => GameResult::DealerWin, // Bank wins
+            BaccaratBetType::Tie => GameResult::Push,
+        };
+        
+        let now = self.runtime.system_time().micros();
+        
+        let record = GameRecord {
+            game_id,
+            game_type: GameType::Baccarat,
+            player_hand, 
+            dealer_hand: banker_hand, // Map banker hand to dealer hand field
+            bet: bet_amount,
+            result, // This is lossy, maybe we should update GameRecord too?
+            payout,
+            timestamp: now,
+            roulette_bets: None,
+            roulette_outcome: None,
+        baccarat_winner: Some(winner),
+            baccarat_bet: Some(bet_type),
+        };
+        self.state.game_history.push(record);
+    }
+
+
 }
 
 // ============================================================================
@@ -690,7 +793,69 @@ impl ContractsContract {
                 bets,
             })
             .with_tracking()
+            .with_tracking()
             .send_to(pending.player_chain);
+    }
+
+    /// Bank receives Baccarat game request - Runs game and settles immediately
+    async fn bank_handle_request_baccarat(
+        &mut self,
+        player: linera_base::identifiers::AccountOwner,
+        player_chain: linera_base::identifiers::ChainId,
+        amount: u64,
+        bet_type: BaccaratBetType,
+    ) {
+        // Generate unique game ID
+        let game_id = *self.state.game_counter.get();
+        self.state.game_counter.set(game_id + 1);
+        
+        // Generate seed
+        let master_seed = *self.state.master_seed.get();
+        let now = self.runtime.system_time().micros();
+        let seed = generate_game_seed(master_seed, game_id, &player, now);
+        
+        // Run logic immediately
+        let (actual_winner, player_hand, banker_hand, player_score, banker_score) = run_baccarat_game(seed);
+        
+        // Calculate payout
+        let mut payout = 0;
+        if actual_winner == bet_type {
+            if bet_type == BaccaratBetType::Tie {
+                payout = amount * 9; // 8:1 payout = 9x total return
+            } else if bet_type == BaccaratBetType::Player {
+                payout = amount * 2; // 1:1 payout
+            } else if bet_type == BaccaratBetType::Banker {
+                // 0.95:1 payout (5% commission)
+                payout = amount + (amount * 95 / 100);
+            }
+        } else if actual_winner == BaccaratBetType::Tie && bet_type != BaccaratBetType::Tie {
+            // Push on Tie
+            payout = amount;
+        }
+
+        // Update house balance
+        let house = *self.state.house_balance.get();
+        if payout > amount {
+            self.state.house_balance.set(house.saturating_sub(payout - amount));
+        } else {
+            self.state.house_balance.set(house + (amount - payout));
+        }
+        
+        // Send settlement directly to player
+        self.runtime
+            .prepare_message(Message::BaccaratSettled {
+                game_id,
+                winner: actual_winner,
+                payout,
+                player_hand,
+                banker_hand,
+                player_score,
+                banker_score,
+                bet_amount: amount,
+                bet_type,
+            })
+            .with_tracking()
+            .send_to(player_chain);
     }
     
     /// Replay game with given seed and actions, return result, payout, and dealer hand
@@ -908,4 +1073,110 @@ impl SimpleRng {
         self.0 = value;
         self.0
     }
+}
+
+fn calculate_baccarat_score(cards: &[Card]) -> u8 {
+    let mut score = 0;
+    for c in cards {
+        let val = match c.value.as_str() {
+            "ace" => 1,
+            "2" => 2,
+            "3" => 3,
+            "4" => 4,
+            "5" => 5,
+            "6" => 6,
+            "7" => 7,
+            "8" => 8,
+            "9" => 9,
+            _ => 0, // 10, J, Q, K are 0
+        };
+        score = (score + val) % 10;
+    }
+    score
+}
+
+fn run_baccarat_game(seed: u64) -> (BaccaratBetType, Vec<Card>, Vec<Card>, u8, u8) {
+    let mut deck = create_deck();
+    shuffle(&mut deck, seed);
+    
+    // Draw initial cards
+    let p1 = deck.pop().unwrap();
+    let b1 = deck.pop().unwrap();
+    let p2 = deck.pop().unwrap();
+    let b2 = deck.pop().unwrap();
+    
+    let mut player_hand = vec![p1, p2];
+    let mut banker_hand = vec![b1, b2];
+    
+    let mut p_score = calculate_baccarat_score(&player_hand);
+    let mut b_score = calculate_baccarat_score(&banker_hand);
+    
+    // Natural win check (8 or 9)
+    if p_score >= 8 || b_score >= 8 {
+        let winner = if p_score > b_score {
+            BaccaratBetType::Player
+        } else if b_score > p_score {
+            BaccaratBetType::Banker
+        } else {
+            BaccaratBetType::Tie
+        };
+        return (winner, player_hand, banker_hand, p_score, b_score);
+    }
+    
+    // Player draw rules
+    let mut p_third = None;
+    if p_score <= 5 {
+        let c = deck.pop().unwrap();
+        
+        // Calculate third card value for Banker rule
+        let val = match c.value.as_str() {
+            "ace" => 1,
+            "2" => 2,
+            "3" => 3,
+            "4" => 4,
+            "5" => 5,
+            "6" => 6,
+            "7" => 7,
+            "8" => 8,
+            "9" => 9,
+            _ => 0,
+        };
+        p_third = Some(val);
+        
+        player_hand.push(c);
+        p_score = calculate_baccarat_score(&player_hand);
+    }
+    
+    // Banker draw rules
+    let banker_draws = if p_third.is_none() {
+        // Player stood (6 or 7) -> Banker draws on 0-5, stands on 6-7
+        b_score <= 5
+    } else {
+        // Player drew a third card
+        let p_val = p_third.unwrap();
+        match b_score {
+            0..=2 => true, // Always draw
+            3 => p_val != 8,
+            4 => (2..=7).contains(&p_val),
+            5 => (4..=7).contains(&p_val),
+            6 => (6..=7).contains(&p_val),
+            _ => false, // 7 stands
+        }
+    };
+    
+    if banker_draws {
+        let c = deck.pop().unwrap();
+        banker_hand.push(c);
+        b_score = calculate_baccarat_score(&banker_hand);
+    }
+    
+    let winner = if p_score > b_score {
+        BaccaratBetType::Player
+    } else if b_score > p_score {
+        BaccaratBetType::Banker
+    } else {
+        BaccaratBetType::Tie
+    };
+    
+    (winner, player_hand, banker_hand, p_score, b_score)
 }

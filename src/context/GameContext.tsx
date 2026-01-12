@@ -9,6 +9,8 @@ interface GameContextType {
     refreshData: () => Promise<void>;
     pendingBet: number;
     setPendingBet: (amount: number) => void;
+    balanceLocked: boolean;
+    setBalanceLocked: (locked: boolean) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -18,6 +20,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const [lineraData, setLineraData] = useState<{ chainId: string; address: string; balance: string; gameBalance?: number } | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
     const [pendingBet, setPendingBet] = useState(0);
+    const [balanceLocked, setBalanceLocked] = useState(false);
 
     const refreshData = useCallback(async () => {
         if (!primaryWallet || !lineraAdapter.isChainConnected()) return;
@@ -94,7 +97,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, [lineraData, refreshData]);
 
     return (
-        <GameContext.Provider value={{ lineraData, isConnecting, refreshData, pendingBet, setPendingBet }}>
+        <GameContext.Provider value={{ lineraData, isConnecting, refreshData, pendingBet, setPendingBet, balanceLocked, setBalanceLocked }}>
             {children}
         </GameContext.Provider>
     );

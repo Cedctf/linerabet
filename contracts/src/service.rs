@@ -14,7 +14,7 @@ use linera_sdk::{
     Service, ServiceRuntime,
 };
 
-use contracts::{Operation, Card, GameResult, GameType, CasinoParams, RouletteBet, RouletteBetType};
+use contracts::{Operation, Card, GameResult, GameType, CasinoParams, RouletteBet, RouletteBetType, BaccaratBetType};
 
 use self::state::{ContractsState, ActiveGame, GamePhase, GameRecord, PendingRouletteGame, ALLOWED_BETS};
 
@@ -124,6 +124,8 @@ impl QueryRoot {
         let state = self.state.lock().await;
         state.pending_roulette.get().as_ref().map(|g| PendingRouletteObject::from(g.clone()))
     }
+
+
 }
 
 // ============================================================================
@@ -190,6 +192,8 @@ struct GameRecordObject {
     timestamp: u64,
     roulette_bets: Option<Vec<RouletteBetObject>>,
     roulette_outcome: Option<u8>,
+    baccarat_winner: Option<BaccaratBetType>,
+    baccarat_bet: Option<BaccaratBetType>,
 }
 
 #[derive(SimpleObject)]
@@ -230,6 +234,8 @@ impl From<PendingRouletteGame> for PendingRouletteObject {
     }
 }
 
+
+
 impl From<GameRecord> for GameRecordObject {
     fn from(r: GameRecord) -> Self {
         GameRecordObject {
@@ -243,6 +249,8 @@ impl From<GameRecord> for GameRecordObject {
             timestamp: r.timestamp,
             roulette_bets: r.roulette_bets.map(|bets| bets.into_iter().map(RouletteBetObject::from).collect()),
             roulette_outcome: r.roulette_outcome,
+            baccarat_winner: r.baccarat_winner,
+            baccarat_bet: r.baccarat_bet,
         }
     }
 }

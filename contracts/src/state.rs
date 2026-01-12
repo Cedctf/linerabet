@@ -140,4 +140,7 @@ pub struct GameRecord {
     pub timestamp: u64,
     pub roulette_bets: Option<Vec<RouletteBet>>,
     pub roulette_outcome: Option<u8>,
+    pub baccarat_winner: Option<contracts::BaccaratBetType>,
+    pub baccarat_bet: Option<contracts::BaccaratBetType>,
 }
+

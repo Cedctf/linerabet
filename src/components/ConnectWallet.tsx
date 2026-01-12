@@ -7,7 +7,7 @@ import { useGame } from '../context/GameContext';
 
 export default function ConnectWallet() {
     const { primaryWallet, setShowAuthFlow } = useDynamicContext();
-    const { lineraData, isConnecting, refreshData, pendingBet } = useGame();
+    const { lineraData, isConnecting, refreshData, pendingBet, balanceLocked } = useGame();
     const [isBuying, setIsBuying] = useState(false);
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
@@ -77,7 +77,7 @@ export default function ConnectWallet() {
                     <div className="flex items-center gap-2">
                         <span className="text-yellow-400 font-bold text-sm">
                             {lineraData.gameBalance !== undefined
-                                ? (lineraData.gameBalance - pendingBet)
+                                ? (balanceLocked ? lineraData.gameBalance : (lineraData.gameBalance - pendingBet))
                                 : "..."} Chips
                         </span>
 

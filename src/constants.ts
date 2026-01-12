@@ -2,8 +2,8 @@ export const LINERA_RPC_URL = "http://localhost:8080";
 
 // Cross-chain casino app
 // Same app deployed once - the bank_chain_id is in Application Parameters
-export const APP_ID = "89283292c9e2bb2509de19dc55b725114c977595088edb7c3c2689d4fc572388";
-export const BANK_CHAIN_ID = "b72131192250b2b38378af28ab3a35326574b1cbb9a247a01cf1c226ef42c7d3";
+export const APP_ID = "dc0c9b3ee08c29d0917db212a4ce9b207aa30d85bbc771070574e46fc6a9a79e";
+export const BANK_CHAIN_ID = "89014c3b756398660aa827a928366d27b2aa13fc7b85f33481ffeb34d0a607f6";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;

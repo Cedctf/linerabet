@@ -13,7 +13,7 @@ import type { BetPayload } from "../components/roulette-blueprint";
 
 
 const RoulettePage = () => {
-  const { lineraData, refreshData, setPendingBet } = useGame();
+  const { lineraData, refreshData, setPendingBet, setBalanceLocked, balanceLocked } = useGame();
   // derived balance from context
   const serverBalance = lineraData?.gameBalance || 0;
   const isConnected = !!lineraData;
@@ -36,20 +36,24 @@ const RoulettePage = () => {
   // Available balance for new bets
   const availableBalance = serverBalance - currentTotalBet;
 
-  // Sync pendingBet with context for header display - only during betting phase
+  // Sync pendingBet with context for header display - only during betting phase when not locked
   useEffect(() => {
-    // Only sync pending bet when user is placing bets (before spin)
-    // pendingBet is cleared explicitly after mutation completes in spin()
-    if (stage === GameStages.PLACE_BET) {
+    // Only sync pending bet when:
+    // 1. User is placing bets (stage = PLACE_BET)
+    // 2. Balance is NOT locked (we're not in mid-spin/result)
+    // This prevents race conditions during resetGame()
+    if (stage === GameStages.PLACE_BET && !balanceLocked) {
       setPendingBet(currentTotalBet);
     }
-    // NO cleanup here - pendingBet is cleared explicitly in spin() after mutation
-  }, [currentTotalBet, stage, setPendingBet]);
+  }, [currentTotalBet, stage, setPendingBet, balanceLocked]);
 
-  // Clear pendingBet on unmount only
+  // Clear pendingBet and unlock balance on unmount only
   useEffect(() => {
-    return () => setPendingBet(0);
-  }, [setPendingBet]);
+    return () => {
+      setPendingBet(0);
+      setBalanceLocked(false);
+    };
+  }, [setPendingBet, setBalanceLocked]);
 
   // Refresh history / sync
   const refresh = useCallback(async () => {
@@ -233,9 +237,10 @@ const RoulettePage = () => {
       const mutation = `mutation { playRoulette(bets: [${betsString}]) }`;
       await lineraAdapter.mutate(mutation);
 
-      // Clear pendingBet now - contract has deducted the bet
-      // This prevents double-counting when refreshData updates the balance
-      setPendingBet(0);
+      // LOCK the balance display - the bet has been deducted on-chain now,
+      // so we don't want the header to subtract pendingBet anymore (would double-count).
+      // Balance will be unlocked and refreshed when user dismisses the result modal.
+      setBalanceLocked(true);
 
       // Poll for result
       let winningNum: number | null = null;
@@ -262,8 +267,8 @@ const RoulettePage = () => {
         throw new Error("Game timed out waiting for Bank result. Please check history later.");
       }
 
-      // Refresh Global Balance
-      await refreshData();
+      // NOTE: Do NOT refresh balance here - it would cause the display to jump
+      // before the animation/result modal. Balance will be refreshed in resetGame().
 
       // Start Animation targeting the winning number
       setWinningNumber({ next: winningNum.toString(), onStop: () => handleSpinEnd(winningNum) });
@@ -271,6 +276,7 @@ const RoulettePage = () => {
     } catch (err: any) {
       console.error("Spin failed:", err);
       alert("Spin failed: " + err.message);
+      setBalanceLocked(false); // Unlock on error
       setBusy(false);
       setStage(GameStages.PLACE_BET);
       refreshData(); // Sync back to truth
@@ -293,20 +299,29 @@ const RoulettePage = () => {
 
     setHistory(prev => [number, ...prev.slice(0, 9)]);
 
-    // Refresh balance after animation - settlement should be complete by now
-    setTimeout(async () => {
-      await refreshData();
-    }, 500);
+    // NOTE: Do NOT refresh balance here - wait until user dismisses the result modal
+    // to prevent any flickering. Balance will be refreshed in resetGame().
 
     setStage(GameStages.WINNERS);
     setBusy(false);
   };
 
-  const resetGame = () => {
+  const resetGame = async () => {
+    // IMPORTANT: Clear placedBets FIRST to ensure currentTotalBet becomes 0
+    // before stage changes to PLACE_BET (which triggers useEffect to sync pendingBet)
     setPlacedBets(new Map());
-    setStage(GameStages.PLACE_BET);
     setWinningNumber({ next: null });
     setLastWinAmount(0);
+
+    // Now unlock balance and refresh
+    setBalanceLocked(false);
+    setPendingBet(0);
+
+    // Refresh to get the updated balance from the server
+    await refreshData();
+
+    // Finally change stage - useEffect will sync pendingBet to currentTotalBet (which is now 0)
+    setStage(GameStages.PLACE_BET);
   };
 
   const [showHistory, setShowHistory] = useState(false);

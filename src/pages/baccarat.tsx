@@ -8,20 +8,15 @@ import CardComp from "../components/Card";
 // Types
 type BaccaratBetType = "PLAYER" | "BANKER" | "TIE";
 
+type Phase = "WaitingForGame" | "Playing" | "RoundComplete";
+
 interface Card {
     suit: string;
     value: string;
 }
 
 interface BaccaratRecord {
-    player_hand: Card[];
-    banker_hand: Card[]; // Note: contract uses snake_case in Struct, but GraphQL might return camelCase or snake_case depending on configuration. async-graphql usually defaults to camelCase for fields unless renamed. Let's assume camelCase for now based on previous files, but check service.rs.
-    // service.rs uses SimpleObject which defaults to camelCase.
-    // wait, in service.rs:
-    // last_baccarat_outcome: Option<BaccaratRecord>,
-    // And BaccaratRecord in state.rs uses snake_case fields. 
-    // async-graphql SimpleObject creates identifiers in camelCase by default.
-    // SO: playerHand, bankerHand.
+    gameId?: number;
     playerHand: Card[];
     bankerHand: Card[];
     bet: number;
@@ -42,6 +37,21 @@ const normalizeCard = (c: any) => {
     }
 }
 
+// Helper to calculate Baccarat score
+const calculateBaccaratScore = (hand: any[]) => {
+    if (!hand || hand.length === 0) return 0;
+    let score = 0;
+    for (const card of hand) {
+        const val = card.value.toLowerCase();
+        let point = 0;
+        if (val === 'ace') point = 1;
+        else if (['10', 'jack', 'queen', 'king'].includes(val)) point = 0;
+        else point = parseInt(val) || 0;
+        score += point;
+    }
+    return score % 10;
+};
+
 export default function BaccaratPage() {
     const { lineraData, refreshData } = useGame();
     const balance = lineraData?.gameBalance || 0;
@@ -56,6 +66,11 @@ export default function BaccaratPage() {
 
     const allowedBets = [1, 2, 3, 4, 5];
 
+    const [phase, setPhase] = useState<Phase>("WaitingForGame");
+
+    // Track last seen game ID to detect new games
+    const [lastSeenGameId, setLastSeenGameId] = useState<number>(-1);
+
     // Refresh Game State
     const refresh = useCallback(async () => {
         if (!lineraAdapter.isChainConnected()) return;
@@ -63,49 +78,77 @@ export default function BaccaratPage() {
             if (!lineraAdapter.isApplicationSet()) {
                 await lineraAdapter.setApplication(CONTRACTS_APP_ID);
             }
-            const owner = lineraAdapter.identity();
             const query = `
-            query GetBaccaratState($owner: AccountOwner!) {
-                player(owner: $owner) {
-                    lastBaccaratOutcome {
-                        playerHand { suit value }
-                        bankerHand { suit value }
-                        bet
-                        betType
-                        winner
-                        payout
-                        timestamp
-                        playerScore
-                        bankerScore
-                        isNatural
-                    }
-                    baccaratHistory {
-                        playerHand { suit value }
-                        bankerHand { suit value }
-                        bet
-                        betType
-                        winner
-                        payout
-                        timestamp
-                    }
+            query GetBaccaratState {
+                gameHistory {
+                    gameId
+                    gameType
+                    baccaratWinner
+                    bet
+                    payout
+                    timestamp
+                    playerHand { suit value }
+                    dealerHand { suit value }
                 }
             }
         `;
-            const data = await lineraAdapter.queryApplication<any>(query, { owner });
-            if (data.player) {
-                setLastOutcome(data.player.lastBaccaratOutcome);
-                setHistory(data.player.baccaratHistory || []);
+            const data = await lineraAdapter.queryApplication<any>(query, {});
+
+            if (data.gameHistory) {
+                const baccHistory = data.gameHistory
+                    .filter((g: any) => g.gameType === "BACCARAT")
+                    .reverse(); // Newest first
+
+                // Map to local format
+                const mappedHistory = baccHistory.map((g: any) => ({
+                    gameId: g.gameId,
+                    playerHand: g.playerHand,
+                    bankerHand: g.dealerHand,
+                    bet: g.bet,
+                    betType: "PLAYER" as BaccaratBetType,
+                    winner: g.baccaratWinner,
+                    payout: g.payout,
+                    timestamp: g.timestamp,
+                    playerScore: calculateBaccaratScore(g.playerHand),
+                    bankerScore: calculateBaccaratScore(g.dealerHand),
+                    isNatural: false
+                }));
+
+                setHistory(mappedHistory);
+
+                // If we are playing and see a new game
+                if (phase === "Playing" && mappedHistory.length > 0) {
+                    const latestGame = mappedHistory[0];
+                    if (latestGame.gameId > lastSeenGameId) {
+                        // found our new game!
+                        setLastOutcome(latestGame);
+                        setPhase("RoundComplete");
+                        setLastSeenGameId(latestGame.gameId);
+                        setBusy(false);
+                        void refreshData();
+                    }
+                } else if (mappedHistory.length > 0 && lastSeenGameId === -1) {
+                    // Initialize last seen on first load
+                    setLastSeenGameId(mappedHistory[0].gameId);
+                }
             }
         } catch (e) {
             console.error("Failed to refresh Baccarat state:", e);
         }
-    }, []);
+    }, [phase, lastSeenGameId, refreshData]);
 
     useEffect(() => {
         if (isConnected) {
             refresh();
         }
-    }, [isConnected, refresh]);
+
+        // Polling when playing
+        let interval: NodeJS.Timeout;
+        if (phase === "Playing" || busy) {
+            interval = setInterval(refresh, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isConnected, refresh, phase, busy]);
 
     const placeBet = async () => {
         if (busy) return;
@@ -113,20 +156,24 @@ export default function BaccaratPage() {
             alert("Insufficient balance");
             return;
         }
+
+        // Capture current latest game ID before betting
+        const currentLatestId = history.length > 0 ? (history[0] as any).gameId : -1;
+        setLastSeenGameId(currentLatestId);
+
         setBusy(true);
+        setPhase("Playing");
+        setLastOutcome(null);
+
         try {
-            // Mutation
-            // Operation: PlayBaccarat { amount: u64, bet_type: BaccaratBetType }
             const mutation = `mutation { playBaccarat(amount: ${betAmount}, betType: ${betType}) }`;
             await lineraAdapter.mutate(mutation);
-
-            await refreshData(); // Refresh balance
-            await refresh(); // Refresh game state
+            // Polling in useEffect will pick up the result
         } catch (e: any) {
             console.error("Bet failed:", e);
             alert("Bet failed: " + e.message);
-        } finally {
             setBusy(false);
+            setPhase("WaitingForGame");
         }
     };
 
@@ -230,7 +277,7 @@ export default function BaccaratPage() {
                             disabled={busy || !!lastOutcome}
                             className="w-full py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-2xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {busy ? "DEALING..." : lastOutcome ? "Result Above" : "DEAL"}
+                            {busy ? "DEALING..." : phase === "RoundComplete" ? "Result Above" : "DEAL"}
                         </button>
                     </div>
 
@@ -271,14 +318,14 @@ export default function BaccaratPage() {
                         </div>
 
                         <button
-                            onClick={() => setLastOutcome(null)}
+                            onClick={() => { setLastOutcome(null); setPhase("WaitingForGame"); }}
                             className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-lg shadow-lg text-xl transform hover:scale-105 transition-all w-full"
                         >
                             Play Again
                         </button>
                     </div>
                 ) : (
-                    <div className="h-24"></div> // Spacer to keep layout stable
+                    <div className="h-24"></div>
                 )}
             </div>
 
