@@ -7,7 +7,7 @@ import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import { BLACK_NUMBERS, WHEEL_NUMBERS } from "@/lib/roulette-utils";
-import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout, BoardVisualLayer } from "../components/roulette-blueprint";
+import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout } from "../components/roulette-blueprint";
 import type { BetPayload } from "../components/roulette-blueprint";
 
 
@@ -415,44 +415,34 @@ const RoulettePage = () => {
 
           {/* New SVG-based Board with hitboxes - FULL WIDTH */}
           <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
-            <div style={{
-              backgroundImage: 'url(/src/components/roulette/assets/Board.png)',
-              backgroundSize: '100% 100%',
-              backgroundRepeat: 'no-repeat',
-              borderRadius: '8px',
-              position: 'relative'
-            }}>
-              <RouletteBoardBlueprint
-                debug={false}
-                onBetSelected={handleBetSelected}
-                placedBets={placedBets}
-                customVisualLayer={<BoardVisualLayer transparent />}
-              />
-            </div>
-
-            {/* Placed Bets Summary - Visual Chips */}
-            {placedBets.size > 0 && (
-              <div className="mt-4 p-4 bg-green-900/50 rounded-lg border border-green-700/30">
-                <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
-                <div className="flex flex-wrap gap-3">
-                  {Array.from(placedBets.entries()).map(([betId, amount]) => (
-                    <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
-                      {/* Visual chip */}
-                      <div className="w-8 h-8 flex items-center justify-center">
-                        <img
-                          src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`} // Fallback to 1 if amount isn't a standard chip (though logic sums them, so this is just a visual rep)
-                          alt="chip"
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                      <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <RouletteBoardBlueprint
+              debug={false}
+              onBetSelected={handleBetSelected}
+              placedBets={placedBets}
+            />
           </div>
 
+          {/* Placed Bets Summary - Visual Chips */}
+          {placedBets.size > 0 && (
+            <div className="mt-4 p-4 bg-green-900/50 rounded-lg border border-green-700/30">
+              <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
+              <div className="flex flex-wrap gap-3">
+                {Array.from(placedBets.entries()).map(([betId, amount]) => (
+                  <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
+                    {/* Visual chip */}
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      <img
+                        src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`} // Fallback to 1 if amount isn't a standard chip (though logic sums them, so this is just a visual rep)
+                        alt="chip"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -482,47 +472,50 @@ const RoulettePage = () => {
             )}
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* Result Modal */}
-      {stage === GameStages.WINNERS && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
+      {
+        stage === GameStages.WINNERS && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
 
-            <div className="flex flex-col items-center gap-2">
-              <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
-              <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                {history[0]}
-              </div>
-            </div>
-
-            <div className="text-center space-y-2">
-              {lastWinAmount > 0 ? (
-                <>
-                  <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
-                    YOU WON
-                  </div>
-                  <div className="text-4xl font-bold text-yellow-400">
-                    ${lastWinAmount}
-                  </div>
-                </>
-              ) : (
-                <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
-                  YOU LOST
+              <div className="flex flex-col items-center gap-2">
+                <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
+                <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                  {history[0]}
                 </div>
-              )}
-            </div>
+              </div>
 
-            <button
-              onClick={resetGame}
-              className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
-            >
-              Play Again
-            </button>
+              <div className="text-center space-y-2">
+                {lastWinAmount > 0 ? (
+                  <>
+                    <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
+                      YOU WON
+                    </div>
+                    <div className="text-4xl font-bold text-yellow-400">
+                      ${lastWinAmount}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
+                    YOU LOST
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={resetGame}
+                className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
+              >
+                Play Again
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
