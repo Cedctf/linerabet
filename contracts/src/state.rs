@@ -3,7 +3,7 @@ use linera_sdk::views::{linera_views, MapView, RegisterView, RootView, ViewStora
 use serde::{Deserialize, Serialize};
 use linera_base::identifiers::{AccountOwner as Owner, ChainId};
 
-use contracts::{Card, GameAction, GameResult, GameType};
+use contracts::{Card, GameAction, GameResult, GameType, RouletteBet};
 
 pub const ALLOWED_BETS: [u64; 5] = [1, 2, 3, 4, 5];
 
@@ -32,6 +32,9 @@ pub struct ContractsState {
     
     /// Pending games awaiting player actions or verification
     pub pending_games: MapView<u64, PendingGame>,
+
+    /// Pending roulette bets (bank chain - for proper payout calculation)
+    pub pending_roulette_bets: MapView<u64, Vec<RouletteBet>>,
     
     /// Counter for generating unique game IDs
     pub game_counter: RegisterView<u64>,
@@ -48,6 +51,9 @@ pub struct ContractsState {
     
     /// Game history for UI
     pub game_history: LogView<GameRecord>,
+
+    /// Pending roulette game (player chain - awaiting verification)
+    pub pending_roulette: RegisterView<Option<PendingRouletteGame>>,
 }
 
 // ============================================================================
@@ -63,6 +69,25 @@ pub struct PendingGame {
     pub bet: u64,
     pub seed: u64,
     pub created_at: u64,
+}
+
+/// Roulette game pending on Bank chain
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PendingRouletteBank {
+    pub player: Owner,
+    pub player_chain: ChainId,
+    pub bets: Vec<RouletteBet>,
+    pub seed: u64,
+    pub created_at: u64,
+}
+
+/// Roulette game pending on Player chain (awaiting result)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PendingRouletteGame {
+    pub game_id: u64,
+    pub seed: u64,
+    pub bets: Vec<RouletteBet>,
+    pub outcome: u8,  // Calculated locally
 }
 
 // ============================================================================
@@ -113,4 +138,6 @@ pub struct GameRecord {
     pub result: GameResult,
     pub payout: u64,
     pub timestamp: u64,
+    pub roulette_bets: Option<Vec<RouletteBet>>,
+    pub roulette_outcome: Option<u8>,
 }
