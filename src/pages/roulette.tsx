@@ -355,7 +355,7 @@ const RoulettePage = () => {
 
           {/* Left Column: Wheel */}
           <div className="flex flex-col items-center gap-6 lg:w-1/3 lg:sticky lg:top-24">
-            <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm transform scale-75 lg:scale-100 transition-transform">
+            <div className="transform scale-75 lg:scale-100 transition-transform">
               <Wheel rouletteData={rouletteData} number={winningNumber} />
             </div>
           </div>
@@ -364,35 +364,13 @@ const RoulettePage = () => {
           <div className="flex flex-col items-center gap-6 flex-1 w-full lg:w-2/3">
 
             {/* Board at the TOP of right column */}
-            <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
+            <div className="w-full px-2">
               <RouletteBoardBlueprint
                 debug={false}
                 onBetSelected={handleBetSelected}
                 placedBets={placedBets}
               />
             </div>
-
-            {/* Placed Bets Summary */}
-            {placedBets.size > 0 && (
-              <div className="w-full p-4 bg-green-900/50 rounded-lg border border-green-700/30">
-                <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
-                <div className="flex flex-wrap gap-3">
-                  {Array.from(placedBets.entries()).map(([betId, amount]) => (
-                    <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
-                      {/* Visual chip */}
-                      <div className="w-8 h-8 flex items-center justify-center">
-                        <img
-                          src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`}
-                          alt="chip"
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                      <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Fixed Bottom Right Controls - Matching blackjack2/baccarat2 style */}
             <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-20">

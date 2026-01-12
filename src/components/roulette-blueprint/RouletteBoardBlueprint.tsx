@@ -165,7 +165,6 @@ export const RouletteBoardBlueprint: React.FC<RouletteBoardBlueprintProps> = ({
                 backgroundSize: '100% 100%',
                 backgroundRepeat: 'no-repeat',
                 borderRadius: '8px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
             }}
         >
             {/* SVG Container with proper aspect ratio - larger for better visibility */}
