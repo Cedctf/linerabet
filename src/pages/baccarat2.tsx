@@ -5,6 +5,7 @@ import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
 import CardComp from "../components/Card";
 import ConnectWallet from "../components/ConnectWallet";
+import Header from "../components/Header";
 
 // Types
 type BaccaratBetType = "PLAYER" | "BANKER" | "TIE";
@@ -54,6 +55,7 @@ export default function Baccarat2Page() {
     const [lastOutcome, setLastOutcome] = useState<BaccaratRecord | null>(null);
     const [history, setHistory] = useState<BaccaratRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [showPopup, setShowPopup] = useState(false);
 
     const allowedBets = [1, 2, 3, 4, 5];
 
@@ -197,6 +199,11 @@ export default function Baccarat2Page() {
 
         setLastOutcome(outcome);
         setHistory(prev => [outcome, ...prev]);
+
+        // Delay popup to let user see result
+        setTimeout(() => {
+            setShowPopup(true);
+        }, 2000);
     };
 
     const placeBet = async () => {
@@ -229,109 +236,125 @@ export default function Baccarat2Page() {
     return (
         <div className="h-screen bg-black text-white overflow-hidden relative font-sans">
             {/* Background */}
-            <div className="absolute inset-0 bg-[url('/baccarat.png')] bg-cover bg-center" />
+            <div className="absolute inset-0 bg-[url('/baccarat-desk.png')] bg-cover bg-center" />
 
             <div className="relative z-10 flex flex-col items-center justify-center h-full py-4 px-4">
-                {/* Top Right Controls */}
-                <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
-                    <ConnectWallet />
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="px-4 py-2 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
-                    >
-                        📜 History ({history.length})
-                    </button>
-                </div>
+                <Header />
+
+                {/* History Button - Bottom Left Corner (always visible) */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="group fixed bottom-4 left-4 z-30 hover:scale-110 transition-transform"
+                    style={{ width: '8vw', height: '18vh' }}
+                >
+                    <img
+                        src="/buttons/history.png"
+                        alt="History"
+                        className="w-full h-full object-contain group-hover:hidden"
+                    />
+                    <img
+                        src="/animations/history.gif"
+                        alt="History"
+                        className="w-full h-full object-contain hidden group-hover:block"
+                    />
+                </button>
 
                 {/* Header Removed */}
 
                 {/* Chip Selection - Bottom Center */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/40 p-4 rounded-xl border border-white/10 w-full max-w-xl backdrop-blur-sm shadow-md flex flex-col items-center z-50">
-                    <h3 className="text-red-200 font-semibold uppercase tracking-wider text-xs mb-2">Select Chip Value</h3>
-                    <div className="flex items-center gap-3 flex-wrap justify-center">
-                        {allowedBets.map((chipValue) => (
-                            <button
-                                key={chipValue}
-                                onClick={() => setBetAmount(chipValue)}
-                                disabled={busy || balance < chipValue}
-                                className={`relative w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-base transition-all shadow-lg ${betAmount === chipValue
-                                    ? "border-yellow-400 bg-gradient-to-br from-yellow-500 to-yellow-600 scale-110"
-                                    : "border-white bg-gradient-to-br from-red-500 to-red-700 hover:scale-105"
-                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
-                            >
-                                {chipValue}
-                            </button>
-                        ))}
-                    </div>
-                </div>
 
-                {/* Bottom Right Controls - Vertical Stack */}
+
+                {/* Bottom Right Controls - Combined */}
+                {/* Bottom Right Controls - Combined */}
                 <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-50">
-                    <div className="text-xl font-mono text-yellow-400 font-bold bg-black/40 px-4 py-2 rounded-lg backdrop-blur-sm border border-yellow-500/30 mb-2">
-                        Bet: {betAmount} Chips
+                    {/* Main Control Panel */}
+                    <div className="bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-4 items-center">
+
+                        {/* Chip Selection */}
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="text-sm font-semibold text-white/80 text-center">Select Chip Value</div>
+                            <div className="flex items-center gap-2">
+                                {allowedBets.map((chipValue) => (
+                                    <button
+                                        key={chipValue}
+                                        onClick={() => setBetAmount(chipValue)}
+                                        disabled={busy || balance < chipValue}
+                                        className={`relative transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed ${betAmount === chipValue ? "scale-125 drop-shadow-[0_0_10px_rgba(255,215,0,0.8)]" : "opacity-90 hover:opacity-100"}`}
+                                    >
+                                        <img
+                                            src={`/Chips/chip${chipValue}.png`}
+                                            alt={`$${chipValue} Chip`}
+                                            className="w-12 h-12 object-contain"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Betting Buttons - Images */}
+                        <div className="flex flex-row gap-3 w-full justify-center items-center">
+                            <button
+                                onClick={() => setBetType("PLAYER")}
+                                className={`transition-all hover:scale-105 ${betType === "PLAYER" ? "scale-110 drop-shadow-[0_0_15px_rgba(37,99,235,0.8)]" : "opacity-80 hover:opacity-100"}`}
+                            >
+                                <img src="/buttons/player.png" alt="Bet Player" className="w-32 object-contain" />
+                            </button>
+                            <button
+                                onClick={() => setBetType("TIE")}
+                                className={`transition-all hover:scale-105 ${betType === "TIE" ? "scale-110 drop-shadow-[0_0_15px_rgba(22,163,74,0.8)]" : "opacity-80 hover:opacity-100"}`}
+                            >
+                                <img src="/buttons/tie.png" alt="Bet Tie" className="w-32 object-contain" />
+                            </button>
+                            <button
+                                onClick={() => setBetType("BANKER")}
+                                className={`transition-all hover:scale-105 ${betType === "BANKER" ? "scale-110 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]" : "opacity-80 hover:opacity-100"}`}
+                            >
+                                <img src="/buttons/banker.png" alt="Bet Banker" className="w-32 object-contain" />
+                            </button>
+                        </div>
+
+                        {/* Deal Button */}
+                        <button
+                            onClick={placeBet}
+                            disabled={busy || !!lastOutcome}
+                            className="w-full mt-2 hover:scale-105 transition-all flex justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <img
+                                src="/deal.png"
+                                alt="Deal"
+                                className="h-16 object-contain drop-shadow-lg"
+                            />
+                        </button>
                     </div>
-
-                    <button
-                        onClick={() => setBetType("PLAYER")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "PLAYER" ? "bg-blue-600 border-blue-400 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.5)]" : "bg-blue-900/40 border-blue-800 hover:bg-blue-900/60 backdrop-blur-md"}`}
-                    >
-                        BET PLAYER
-                    </button>
-                    <button
-                        onClick={() => setBetType("TIE")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "TIE" ? "bg-green-600 border-green-400 scale-105 shadow-[0_0_20px_rgba(22,163,74,0.5)]" : "bg-green-900/40 border-green-800 hover:bg-green-900/60 backdrop-blur-md"}`}
-                    >
-                        BET TIE
-                    </button>
-                    <button
-                        onClick={() => setBetType("BANKER")}
-                        className={`w-48 py-3 rounded-xl border-2 font-bold text-lg transition-all ${betType === "BANKER" ? "bg-red-600 border-red-400 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.5)]" : "bg-red-900/40 border-red-800 hover:bg-red-900/60 backdrop-blur-md"}`}
-                    >
-                        BET BANKER
-                    </button>
-
-                    <button
-                        onClick={placeBet}
-                        disabled={busy || !!lastOutcome}
-                        className="w-48 py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-extrabold text-2xl rounded-xl shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-                    >
-                        {busy ? "..." : "DEAL"}
-                    </button>
                 </div>
 
                 {/* Game Area - Absolute Positioning for Manual Placement */}
                 <div className="absolute inset-0 pointer-events-none">
                     {/* Player Hand */}
-                    {/* Mobile: Top 15%, Centered. Desktop: Top 20%, Left 25% */}
-                    <div className="absolute top-[15%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-[25%] md:translate-x-0 md:top-[20%] pointer-events-auto bg-blue-900/20 p-4 md:p-6 rounded-2xl border-2 border-blue-500/30 flex flex-col items-center backdrop-blur-sm transition-all duration-300 hover:border-blue-400/50">
-                        <h2 className="text-xl md:text-2xl font-bold text-blue-400 mb-2 md:mb-4 tracking-widest">PLAYER</h2>
+                    {/* Mobile: Top 25%, Centered. Desktop: Top 35%, Left 25% */}
+                    <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-[25%] md:translate-x-0 md:top-[35%] pointer-events-auto flex flex-col items-center transition-all duration-300">
                         <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
-                            {lastOutcome ? (
+                            {lastOutcome && (
                                 lastOutcome.playerHand.map((c, i) => (
                                     <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
                                         <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={window.innerWidth < 768 ? 60 : 80} height={window.innerWidth < 768 ? 84 : 112} />
                                     </div>
                                 ))
-                            ) : (
-                                <div className="text-blue-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-blue-500/30 rounded-lg w-16 h-24 md:w-20 md:h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
                         {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.playerScore}</div>}
                     </div>
 
                     {/* Banker Hand */}
-                    {/* Mobile: Top 45%, Centered. Desktop: Top 20%, Right 25% */}
-                    <div className="absolute top-[45%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-auto md:right-[25%] md:translate-x-0 md:top-[20%] pointer-events-auto bg-red-900/20 p-4 md:p-6 rounded-2xl border-2 border-red-500/30 flex flex-col items-center backdrop-blur-sm transition-all duration-300 hover:border-red-400/50">
-                        <h2 className="text-xl md:text-2xl font-bold text-red-400 mb-2 md:mb-4 tracking-widest">BANKER</h2>
+                    {/* Mobile: Top 55%, Centered. Desktop: Top 35%, Right 25% */}
+                    <div className="absolute top-[55%] left-1/2 -translate-x-1/2 w-[90%] md:w-[350px] md:left-auto md:right-[25%] md:translate-x-0 md:top-[35%] pointer-events-auto flex flex-col items-center transition-all duration-300">
                         <div className="flex gap-2 md:gap-4 min-h-[100px] md:min-h-[120px] items-center justify-center flex-wrap">
-                            {lastOutcome ? (
+                            {lastOutcome && (
                                 lastOutcome.bankerHand.map((c, i) => (
                                     <div key={i} className="transform hover:scale-105 transition-transform shadow-xl">
                                         <CardComp suit={normalizeCard(c).suit as any} value={normalizeCard(c).value as any} width={window.innerWidth < 768 ? 60 : 80} height={window.innerWidth < 768 ? 84 : 112} />
                                     </div>
                                 ))
-                            ) : (
-                                <div className="text-red-300/30 font-bold text-xl tracking-widest border-2 border-dashed border-red-500/30 rounded-lg w-16 h-24 md:w-20 md:h-28 flex items-center justify-center">?</div>
                             )}
                         </div>
                         {lastOutcome && <div className="text-4xl md:text-5xl font-black mt-2 md:mt-4 text-white drop-shadow-lg">{lastOutcome.bankerScore}</div>}
@@ -339,29 +362,36 @@ export default function Baccarat2Page() {
                 </div>
 
                 {/* Outcome Message & Controls - Absolute Positioned above Chip Selection */}
-                {lastOutcome && (
-                    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 mb-4 w-full max-w-lg mx-auto bg-green-900/90 p-4 rounded-xl border border-green-500/30 backdrop-blur-md z-[60] shadow-2xl">
-                        <div className="text-center animate-bounce">
-                            <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 drop-shadow-sm uppercase">
-                                {lastOutcome.winner} WINS
-                            </div>
-                            {lastOutcome.payout > 0 ? (
-                                <div className="text-xl text-green-400 font-bold mt-1">
-                                    You Won {lastOutcome.payout} Chips!
-                                </div>
-                            ) : (
-                                <div className="text-xl text-red-400 font-bold mt-1">
-                                    You Lost {lastOutcome.bet} Chips
-                                </div>
-                            )}
+                {/* Result Popup with Try Again - Center */}
+                {showPopup && lastOutcome && (
+                    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+                        <div className="relative">
+                            {/* Win/Lose Image */}
+                            <img
+                                src={
+                                    lastOutcome.payout > 0
+                                        ? "/animations/win.png"
+                                        : "/animations/lose.png"
+                                }
+                                alt={lastOutcome.payout > 0 ? "You Win!" : "You Lose"}
+                                className="max-w-[50vw] max-h-[60vh] object-contain"
+                            />
+                            {/* Try Again Button - Overlaid at bottom of image */}
+                            <button
+                                onClick={() => {
+                                    setShowPopup(false);
+                                    setLastOutcome(null);
+                                }}
+                                className="absolute bottom-[5%] left-1/2 -translate-x-1/2 hover:scale-110 transition-transform"
+                                style={{ width: '15vw', height: '12vh' }}
+                            >
+                                <img
+                                    src="/buttons/try-again.png"
+                                    alt="Play Again"
+                                    className="w-full h-full object-contain"
+                                />
+                            </button>
                         </div>
-
-                        <button
-                            onClick={() => setLastOutcome(null)}
-                            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-lg shadow-lg text-lg transform hover:scale-105 transition-all w-full"
-                        >
-                            Play Again
-                        </button>
                     </div>
                 )}
             </div>

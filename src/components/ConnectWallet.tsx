@@ -7,7 +7,7 @@ import { useGame } from '../context/GameContext';
 
 export default function ConnectWallet() {
     const { primaryWallet, setShowAuthFlow } = useDynamicContext();
-    const { lineraData, isConnecting, refreshData } = useGame();
+    const { lineraData, isConnecting, refreshData, pendingBet } = useGame();
     const [isBuying, setIsBuying] = useState(false);
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
@@ -28,6 +28,8 @@ export default function ConnectWallet() {
             }
 
             // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
+            // 1. Transfer skipped to simplify UX (devnet/testnet faucet)
+            /*
             await lineraAdapter.client.transfer({
                 recipient: {
                     chain_id: chainId,
@@ -35,6 +37,7 @@ export default function ConnectWallet() {
                 },
                 amount: 1,
             });
+            */
 
             // 2. Request chips from contract
             const mutation = `mutation { requestChips }`;
@@ -73,7 +76,9 @@ export default function ConnectWallet() {
 
                     <div className="flex items-center gap-2">
                         <span className="text-yellow-400 font-bold text-sm">
-                            {lineraData.gameBalance !== undefined ? lineraData.gameBalance : "..."} Chips
+                            {lineraData.gameBalance !== undefined
+                                ? (lineraData.gameBalance - pendingBet)
+                                : "..."} Chips
                         </span>
 
                         <button

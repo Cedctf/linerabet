@@ -63,9 +63,7 @@ function ChipComponent(props: { currentItemChips: any; tdKey: any; cellClass: an
             className={cellClass}
             rowSpan={props.rowSpan}
             colSpan={props.colSpan}
-            onClick={() => {
-                props.onCellClick(cell);
-            }}
+            // onClick handler REMOVED - clicks now handled by RouletteHotspotsOverlay
             style={{ position: "relative" }} // Needed for absolute positioning of chip
         >
             {/* Render ONLY if there is a bet */}
