@@ -75,6 +75,8 @@ interface BoardVisualLayerProps {
 
 export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = false, transparent = false }) => {
     const { gridTop, cellHeight, gridLeft, cellWidth, outsideHeight, columnWidth } = BOARD_CONFIG;
+    const strokeColor = transparent ? 'transparent' : COLORS.gridLine;
+    const textColor = transparent ? 'transparent' : COLORS.white;
 
     // Generate number cells
     const numberCells = [];
@@ -90,7 +92,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
             width={`${zeroCoords.width}%`}
             height={`${zeroCoords.height}%`}
             fill={transparent ? 'transparent' : COLORS.green}
-            stroke={COLORS.gridLine}
+            stroke={strokeColor}
             strokeWidth="1"
         />
     );
@@ -99,7 +101,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
             key="zero-text"
             x={`${zeroCoords.x + zeroCoords.width / 2}%`}
             y={`${zeroCoords.y + zeroCoords.height / 2}%`}
-            fill={COLORS.white}
+            fill={textColor}
             fontSize="5%"
             textAnchor="middle"
             dominantBaseline="middle"
@@ -123,7 +125,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 width={`${width}%`}
                 height={`${height}%`}
                 fill={transparent ? 'transparent' : (isRed ? COLORS.red : COLORS.black)}
-                stroke={COLORS.gridLine}
+                stroke={strokeColor}
                 strokeWidth="1"
             />
         );
@@ -132,7 +134,7 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 key={`text-${num}`}
                 x={`${x + width / 2}%`}
                 y={`${y + height / 2}%`}
-                fill={COLORS.white}
+                fill={textColor}
                 fontSize="4%"
                 textAnchor="middle"
                 dominantBaseline="middle"
@@ -154,13 +156,13 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                     width={`${columnWidth}%`}
                     height={`${cellHeight}%`}
                     fill={transparent ? 'transparent' : COLORS.green}
-                    stroke={COLORS.gridLine}
+                    stroke={strokeColor}
                     strokeWidth="1"
                 />
                 <text
                     x={`${gridLeft + 12 * cellWidth + columnWidth / 2}%`}
                     y={`${y + cellHeight / 2}%`}
-                    fill={COLORS.white}
+                    fill={textColor}
                     fontSize="3%"
                     textAnchor="middle"
                     dominantBaseline="middle"
@@ -186,13 +188,13 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 width={`${dozenWidth}%`}
                 height={`${outsideHeight}%`}
                 fill={transparent ? 'transparent' : COLORS.green}
-                stroke={COLORS.gridLine}
+                stroke={strokeColor}
                 strokeWidth="1"
             />
             <text
                 x={`${dozen.x + dozenWidth / 2}%`}
                 y={`${dozenY + outsideHeight / 2}%`}
-                fill={COLORS.white}
+                fill={textColor}
                 fontSize="3%"
                 textAnchor="middle"
                 dominantBaseline="middle"
@@ -221,13 +223,13 @@ export const BoardVisualLayer: React.FC<BoardVisualLayerProps> = ({ debug = fals
                 width={`${evenMoneyWidth}%`}
                 height={`${outsideHeight}%`}
                 fill={transparent ? 'transparent' : bet.fill}
-                stroke={COLORS.gridLine}
+                stroke={strokeColor}
                 strokeWidth="1"
             />
             <text
                 x={`${gridLeft + i * evenMoneyWidth + evenMoneyWidth / 2}%`}
                 y={`${evenMoneyY + outsideHeight / 2}%`}
-                fill={COLORS.white}
+                fill={textColor}
                 fontSize={bet.label === '◆' ? '6%' : '3%'}
                 textAnchor="middle"
                 dominantBaseline="middle"
