@@ -1,4 +1,19 @@
-export const LINERA_RPC_URL = "http://localhost:8080";
+// Determine base URL - use current host for deployed version, localhost for local dev
+const isLocalDev = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// For deployed version, use the same domain with /faucet and /api proxies
+// For local dev, use localhost directly
+export const LINERA_FAUCET_URL = isLocalDev
+    ? "http://localhost:8080"
+    : `${window.location.origin}/faucet`;
+
+export const LINERA_SERVICE_URL = isLocalDev
+    ? "http://localhost:8081"
+    : `${window.location.origin}/api`;
+
+// Legacy alias
+export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
 // Cross-chain casino app
 // Same app deployed once - the bank_chain_id is in Application Parameters
