@@ -10,9 +10,11 @@ export NVM_DIR="$HOME/.nvm"
 
 cd /app
 
-# ========================================
-# START LINERA NETWORK
-# ========================================
+# Clean up any existing wallet (for fresh start)
+echo "🔹 Cleaning up old wallet state..."
+rm -rf /root/.config/linera
+rm -rf /data/linera/*
+mkdir -p /data/linera
 echo "🔹 Starting Linera Network with Faucet..."
 
 # Use linera net helper for proper process management
