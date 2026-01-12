@@ -141,6 +141,9 @@ const ChipsOverlayLayer: React.FC<{ placedBets: Map<string, number> }> = ({ plac
     );
 };
 
+// Import the background image
+import BoardImage from '../roulette/assets/Board.png';
+
 export const RouletteBoardBlueprint: React.FC<RouletteBoardBlueprintProps> = ({
     debug = false,
     onBetSelected,
@@ -158,6 +161,11 @@ export const RouletteBoardBlueprint: React.FC<RouletteBoardBlueprintProps> = ({
                 width: '100%',
                 margin: '0 auto',
                 position: 'relative',
+                backgroundImage: `url(${BoardImage})`,
+                backgroundSize: '100% 100%',
+                backgroundRepeat: 'no-repeat',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
             }}
         >
             {/* SVG Container with proper aspect ratio - larger for better visibility */}
@@ -170,11 +178,10 @@ export const RouletteBoardBlueprint: React.FC<RouletteBoardBlueprintProps> = ({
                     height: 'auto',
                     display: 'block',
                     borderRadius: '8px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
                 }}
             >
                 {/* Visual Layer (grid, numbers, labels) - replaceable with image */}
-                {customVisualLayer || <BoardVisualLayer debug={debug} />}
+                {customVisualLayer || <BoardVisualLayer debug={debug} transparent={true} />}
 
                 {/* Hitbox Layer (clickable areas) */}
                 <BoardHitboxLayer debug={debug} onBetSelected={handleBetSelected} />
