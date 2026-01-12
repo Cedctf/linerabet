@@ -351,22 +351,51 @@ const RoulettePage = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-8 items-center justify-center w-full">
+        <div className="flex flex-col lg:flex-row gap-8 items-start justify-center w-full max-w-[1800px]">
 
-          <div className="flex flex-col items-center gap-6">
-            <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm">
+          {/* Left Column: Wheel */}
+          <div className="flex flex-col items-center gap-6 lg:w-1/3 lg:sticky lg:top-24">
+            <div className="bg-green-900/40 p-8 rounded-full border-4 border-green-700/30 shadow-2xl backdrop-blur-sm transform scale-75 lg:scale-100 transition-transform">
               <Wheel rouletteData={rouletteData} number={winningNumber} />
-            </div>
-
-            <div className="h-16 flex items-center justify-center">
-              {/* Placeholder for spacing, modal is now global/overlay */}
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-6 flex-1">
+          {/* Right Column: Board & Controls */}
+          <div className="flex flex-col items-center gap-6 flex-1 w-full lg:w-2/3">
 
-            {/* Chip Selection - Blackjack Style */}
-            <div className="flex flex-col items-center gap-4 bg-green-900/50 p-6 rounded-lg border-2 border-green-700/50 w-full max-w-lg">
+            {/* Board at the TOP of right column */}
+            <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
+              <RouletteBoardBlueprint
+                debug={false}
+                onBetSelected={handleBetSelected}
+                placedBets={placedBets}
+              />
+            </div>
+
+            {/* Placed Bets Summary */}
+            {placedBets.size > 0 && (
+              <div className="w-full p-4 bg-green-900/50 rounded-lg border border-green-700/30">
+                <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
+                <div className="flex flex-wrap gap-3">
+                  {Array.from(placedBets.entries()).map(([betId, amount]) => (
+                    <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
+                      {/* Visual chip */}
+                      <div className="w-8 h-8 flex items-center justify-center">
+                        <img
+                          src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`}
+                          alt="chip"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Controls BELOW the board */}
+            <div className="flex flex-col items-center gap-4 bg-green-900/50 p-6 rounded-lg border-2 border-green-700/50 w-full max-w-2xl">
               <h3 className="text-xl font-semibold text-green-200">Select Your Chip</h3>
               <div className="flex items-center gap-4 flex-wrap justify-center">
                 {[1, 5, 10, 25, 100].map((chipValue) => (
@@ -388,12 +417,10 @@ const RoulettePage = () => {
                 ))}
               </div>
 
-              {/* Total Bet Display */}
               <div className="text-lg text-green-300 font-semibold">
                 Total Bet: <span className="text-yellow-400">${currentTotalBet}</span>
               </div>
 
-              {/* Clear Bet / Spin Buttons */}
               <div className="flex gap-4">
                 <button
                   onClick={clearBet}
@@ -411,111 +438,81 @@ const RoulettePage = () => {
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* New SVG-based Board with hitboxes - FULL WIDTH */}
-          <div className="w-full px-2 bg-black/20 rounded-xl border border-white/5">
-            <RouletteBoardBlueprint
-              debug={false}
-              onBetSelected={handleBetSelected}
-              placedBets={placedBets}
-            />
           </div>
+        </div>
 
-          {/* Placed Bets Summary - Visual Chips */}
-          {placedBets.size > 0 && (
-            <div className="mt-4 p-4 bg-green-900/50 rounded-lg border border-green-700/30">
-              <div className="text-green-400 font-semibold mb-3 text-lg">Placed Bets:</div>
-              <div className="flex flex-wrap gap-3">
-                {Array.from(placedBets.entries()).map(([betId, amount]) => (
-                  <div key={betId} className="flex items-center gap-2 px-3 py-2 bg-black/40 rounded-lg border border-green-600/30">
-                    {/* Visual chip */}
-                    <div className="w-8 h-8 flex items-center justify-center">
-                      <img
-                        src={`/Chips/chip${[1, 5, 10, 25, 100].includes(amount) ? amount : 1}.png`} // Fallback to 1 if amount isn't a standard chip (though logic sums them, so this is just a visual rep)
-                        alt="chip"
-                        className="w-full h-full object-contain"
-                      />
+        {showHistory && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-2 border-green-600 p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+              <div className="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
+                <h2 className="text-3xl font-bold text-green-400">Winning Numbers</h2>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <span className="text-2xl">✕</span>
+                </button>
+              </div>
+
+              {history.length === 0 ? (
+                <p className="text-green-300/50 text-center py-12 text-xl">No spins yet.</p>
+              ) : (
+                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-4">
+                  {history.map((num, i) => (
+                    <div key={i} className={`w-12 h-12 flex items-center justify-center rounded-full font-bold text-lg shadow-md border-2 border-white/20 ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                      {num}
                     </div>
-                    <span className="text-yellow-300 font-medium">{betId.replace(/_/g, ' ')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showHistory && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-2 border-green-600 p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-            <div className="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
-              <h2 className="text-3xl font-bold text-green-400">Winning Numbers</h2>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <span className="text-2xl">✕</span>
-              </button>
-            </div>
-
-            {history.length === 0 ? (
-              <p className="text-green-300/50 text-center py-12 text-xl">No spins yet.</p>
-            ) : (
-              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-4">
-                {history.map((num, i) => (
-                  <div key={i} className={`w-12 h-12 flex items-center justify-center rounded-full font-bold text-lg shadow-md border-2 border-white/20 ${num === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(num) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                    {num}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )
-      }
-
-      {/* Result Modal */}
-      {
-        stage === GameStages.WINNERS && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-            <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
-
-              <div className="flex flex-col items-center gap-2">
-                <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
-                <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
-                  {history[0]}
+                  ))}
                 </div>
-              </div>
-
-              <div className="text-center space-y-2">
-                {lastWinAmount > 0 ? (
-                  <>
-                    <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
-                      YOU WON
-                    </div>
-                    <div className="text-4xl font-bold text-yellow-400">
-                      ${lastWinAmount}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
-                    YOU LOST
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={resetGame}
-                className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
-              >
-                Play Again
-              </button>
+              )}
             </div>
           </div>
         )
-      }
-    </div >
+        }
+
+        {/* Result Modal */}
+        {
+          stage === GameStages.WINNERS && (
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+              <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-2xl border-4 border-green-500 p-10 max-w-md w-full shadow-[0_0_50px_rgba(0,255,0,0.3)] transform animate-in fade-in zoom-in duration-300 flex flex-col items-center gap-8">
+
+                <div className="flex flex-col items-center gap-2">
+                  <h2 className="text-gray-300 uppercase tracking-widest font-semibold">Winning Number</h2>
+                  <div className={`w-24 h-24 flex items-center justify-center rounded-full font-bold text-4xl shadow-2xl border-4 border-white ${history[0] === 0 ? 'bg-green-600' : BLACK_NUMBERS.includes(history[0]) ? 'bg-gray-900' : 'bg-red-600'}`}>
+                    {history[0]}
+                  </div>
+                </div>
+
+                <div className="text-center space-y-2">
+                  {lastWinAmount > 0 ? (
+                    <>
+                      <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-sm">
+                        YOU WON
+                      </div>
+                      <div className="text-4xl font-bold text-yellow-400">
+                        ${lastWinAmount}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-5xl font-black text-gray-400 drop-shadow-sm">
+                      YOU LOST
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={resetGame}
+                  className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all border-b-4 border-green-800 active:border-b-0 active:translate-y-1"
+                >
+                  Play Again
+                </button>
+              </div>
+            </div>
+          )
+        }
+      </div>
+    </div>
   );
 };
 

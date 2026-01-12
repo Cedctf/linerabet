@@ -51,7 +51,7 @@ const Hitbox: React.FC<HitboxProps> = ({ id, x, y, width, height, debug, onBetSe
                     : (isHovered ? 'rgba(255,255,255,0.3)' : 'transparent')
                 }
                 stroke={debug ? 'lime' : (isHovered ? 'white' : 'transparent')}
-                strokeWidth={isHovered ? '2' : '1'}
+                strokeWidth={isHovered ? '1' : '1'}
                 filter={isHovered ? 'drop-shadow(0 0 8px rgba(255,255,255,0.8))' : undefined}
                 rx="1"
             />
