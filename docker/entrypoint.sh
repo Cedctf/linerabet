@@ -96,9 +96,12 @@ cd /app
 npm install
 
 # ========================================
-# START FRONTEND
+# BUILD AND START FRONTEND
 # ========================================
-echo "🔹 Starting frontend dev server..."
+echo "🔹 Building frontend for production..."
+npm run build
+
+echo "🔹 Starting frontend server..."
 echo "========================================"
 echo "🎰 Casino is running!"
 echo "   Frontend: http://localhost:5173"
@@ -108,4 +111,5 @@ echo "   App ID:   $APP_ID"
 echo "   Chain ID: $CHAIN_ID"
 echo "========================================"
 
-npm run dev -- --host 0.0.0.0
+# Use preview to serve the built files (port 5173)
+npm run preview -- --host 0.0.0.0 --port 5173

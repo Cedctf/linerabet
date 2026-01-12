@@ -75,6 +75,8 @@ export default defineConfig({
     },
   },
   preview: {
+    host: '0.0.0.0',
+    allowedHosts: ['linera.click', 'www.linera.click', 'localhost'],
     headers: {
       'Cross-Origin-Embedder-Policy': 'credentialless',
       'Cross-Origin-Opener-Policy': 'same-origin',
