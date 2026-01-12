@@ -313,17 +313,17 @@ const RoulettePage = () => {
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative font-sans">
-      <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-900 to-green-950 opacity-90" />
+      {/* Background Image */}
       <div
-        className="absolute inset-0 opacity-10"
+        className="absolute inset-0 z-0"
         style={{
-          backgroundImage:
-            "linear-gradient(#00ff00 1px, transparent 1px), linear-gradient(90deg, #00ff00 1px, transparent 1px)",
-          backgroundSize: "50px 50px",
+          backgroundImage: 'url(/roulette-desk.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}
       />
-      <div className="absolute top-20 left-20 w-96 h-96 bg-green-500 rounded-full opacity-10 blur-3xl" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 bg-green-600 rounded-full opacity-10 blur-3xl" />
+      <div className="absolute inset-0 bg-black/30 z-0" /> {/* Optional overlay for readability */}
 
       {/* History Button - Bottom Left Corner (always visible) */}
       <button
