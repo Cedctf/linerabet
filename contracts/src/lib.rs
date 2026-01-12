@@ -69,6 +69,9 @@ pub enum Operation {
 
     /// Report Roulette result for Bank verification
     ReportRouletteResult { game_id: u64, claimed_outcome: u8 },
+
+    /// Start a Baccarat game
+    PlayBaccarat { amount: u64, bet_type: BaccaratBetType },
 }
 
 // ============================================================================
@@ -114,6 +117,16 @@ pub enum Message {
         game_id: u64,
         claimed_outcome: u8,
     },
+
+    /// Request a Baccarat game
+    RequestBaccaratGame {
+        player: AccountOwner,
+        player_chain: ChainId,
+        amount: u64,
+        bet_type: BaccaratBetType,
+    },
+
+
     
     // ─────────────────────────────────────────────────────────────────────────
     // Bank → Player
@@ -153,6 +166,19 @@ pub enum Message {
         outcome: u8,
         payout: u64,
         bets: Vec<RouletteBet>,
+    },
+
+    /// Baccarat game settled
+    BaccaratSettled {
+        game_id: u64,
+        winner: BaccaratBetType,
+        payout: u64,
+        player_hand: Vec<Card>,
+        banker_hand: Vec<Card>,
+        player_score: u8,
+        banker_score: u8,
+        bet_amount: u64,
+        bet_type: BaccaratBetType,
     },
 }
 
