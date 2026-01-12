@@ -73,7 +73,7 @@
 }
 
 .roulette-wheel circle {
-  cursor: pointer;
+  cursor: default;
   fill: transparent;
 }
 
@@ -100,6 +100,8 @@
   background: url(./assets/Board.png);
   background-size: 1000px auto;
   margin: 0 auto;
+  outline: 2px solid red;
+  /* DEBUG: Show board range */
 }
 
 .roulette-board-grid-numbers {
@@ -151,7 +153,7 @@
   font-size: 18px;
   color: #ffff;
   transition: .5s;
-  cursor: pointer;
+  cursor: default;
 }
 
 .roulette-game-container ul li.board-chip div::before {
@@ -169,17 +171,7 @@
   opacity: 0;
 }
 
-.roulette-game-container ul li.board-chip div:hover::before {
-  transform: scale(1.1);
-  box-shadow: 0 0 15px #ffee10;
-  opacity: 1;
-}
-
-.roulette-game-container ul li.board-chip div:hover {
-  color: #ffee10;
-  box-shadow: 0 0 5px #ffee10;
-  text-shadow: 0 0 5px #ffee10;
-}
+/* Hover effect removed */
 
 .roulette-game-container ul li.board-chip div.chip_selected {
   color: #ffee10;
@@ -213,25 +205,28 @@ div.chip-100-placed {
   background-color: #1a1a1a;
   border: 4px dashed #fff;
   border-radius: 50%;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
+
 div.chip-20-placed {
   background-color: #2563eb;
   border: 4px dashed #fff;
   border-radius: 50%;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
+
 div.chip-10-placed {
   background-color: #f97316;
   border: 4px dashed #fff;
   border-radius: 50%;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
+
 div.chip-5-placed {
   background-color: #9333ea;
   border: 4px dashed #fff;
   border-radius: 50%;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .roulette-actions {
@@ -342,7 +337,388 @@ div.chip-5-placed {
   margin-bottom: 10px;
 }
 
-.board-cell-number:hover {
-  opacity: 0.7;
-  cursor: pointer;
+.board-cell-number {
+  cursor: default;
+}
+
+/* DEBUG MODE - Shows all clickable bet positions */
+.debug-mode .board-cell-number {
+  position: relative;
+}
+
+.debug-mode .board-cell-number::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  background: lime;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px lime;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Split bet - 2 numbers (cyan horizontal line) */
+.debug-mode .board-cell-double-split {
+  position: relative;
+}
+
+.debug-mode .board-cell-double-split::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 4px;
+  background: cyan;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px cyan;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Street bet - 3 numbers (yellow horizontal line) */
+.debug-mode .board-cell-triple-split {
+  position: relative;
+}
+
+.debug-mode .board-cell-triple-split::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 4px;
+  background: yellow;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px yellow;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Corner bet - 4 numbers (magenta square) */
+.debug-mode .board-cell-quad-split {
+  position: relative;
+}
+
+.debug-mode .board-cell-quad-split::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: magenta;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px magenta;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Dozen bets - 1st/2nd/3rd 12 (orange outline) */
+.debug-mode .board-cell-number-1-12,
+.debug-mode .board-cell-number-2-12,
+.debug-mode .board-cell-number-3-12 {
+  position: relative;
+}
+
+.debug-mode td[class*="board-cell-number-1-12"]:not(.board-cell-number)::after,
+.debug-mode td[class*="board-cell-number-2-12"]:not(.board-cell-number)::after,
+.debug-mode td[class*="board-cell-number-3-12"]:not(.board-cell-number)::after {
+  content: '12';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 16px;
+  background: orange;
+  border-radius: 4px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px orange;
+  pointer-events: none;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: black;
+}
+
+/* Even money bets - 1to18, EVEN, RED, BLACK, ODD, 19to36 (blue outline) */
+.debug-mode .board-cell-number-1-18:not(.board-cell-number),
+.debug-mode .board-cell-number-19-36:not(.board-cell-number),
+.debug-mode .board-cell-even:not(.board-cell-number),
+.debug-mode .board-cell-odd:not(.board-cell-number) {
+  position: relative;
+}
+
+.debug-mode td.board-cell-number-1-18:not(.board-cell-number)::after,
+.debug-mode td.board-cell-number-19-36:not(.board-cell-number)::after,
+.debug-mode td.board-cell-even:not(.board-cell-number)::after,
+.debug-mode td.board-cell-odd:not(.board-cell-number)::after {
+  content: '1:1';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 16px;
+  background: #3b82f6;
+  border-radius: 4px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px #3b82f6;
+  pointer-events: none;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: white;
+}
+
+/* RED bet (red circle) */
+.debug-mode td.board-cell-red:not(.board-cell-number)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background: #ef4444;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px #ef4444;
+  pointer-events: none;
+  z-index: 100;
+  border: 2px solid white;
+}
+
+/* BLACK bet (dark circle) */
+.debug-mode td.board-cell-black:not(.board-cell-number)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background: #1f2937;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px #1f2937;
+  pointer-events: none;
+  z-index: 100;
+  border: 2px solid white;
+}
+
+/* ============================================
+   LINE BET (5:1) - 6 numbers (2 streets)
+   Only odd positions: 1st, 3rd, 5th, 7th, 9th, 11th
+   ============================================ */
+/* Street & Line Bet Indicators - Alternating Pattern */
+.debug-mode .board-cell-triple-split {
+  position: relative;
+}
+
+/* Base style for both markers */
+.debug-mode .board-cell-triple-split::before,
+.debug-mode .board-cell-triple-split::after {
+  position: absolute;
+  width: 28px;
+  height: 14px;
+  border-radius: 4px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: bold;
+  color: black;
+}
+
+/* TOP row shifts (moves markers from Row 2 up to edge) */
+.debug-mode tr:nth-child(2) .board-cell-triple-split::before,
+.debug-mode tr:nth-child(2) .board-cell-triple-split::after {
+  top: -150% !important;
+}
+
+/* Cyan (Line Bet) - On boundaries between streets */
+.debug-mode .board-cell-triple-split::before {
+  content: '';
+  /* No number needed if it's just a rectangle */
+  top: 250%;
+  left: calc(50% + 70px);
+  /* First line is 1/4 (70px from j=1) shifted left by 200% total */
+  background: #22d3ee;
+  box-shadow:
+    70px 0 0 #22d3ee,
+    /* Line 4/7 */
+    140px 0 0 #22d3ee,
+    /* Line 7/10 */
+    210px 0 0 #22d3ee,
+    /* Line 10/13 */
+    280px 0 0 #22d3ee,
+    /* Line 13/16 */
+    350px 0 0 #22d3ee,
+    /* Line 16/19 */
+    420px 0 0 #22d3ee,
+    /* Line 19/22 */
+    490px 0 0 #22d3ee,
+    /* Line 22/25 */
+    560px 0 0 #22d3ee,
+    /* Line 25/28 */
+    630px 0 0 #22d3ee,
+    /* Line 28/31 */
+    700px 0 0 #22d3ee;
+  /* Line 31/34 */
+  /* Total 11 Cyan markers (original + 10 shadows) */
+}
+
+/* Yellow (Street Bet) - In middle of streets */
+.debug-mode .board-cell-triple-split::after {
+  content: '';
+  top: 250%;
+  left: calc(50% + 35px);
+  /* First street is 1 (35px from j=1) shifted left by 200% total */
+  background: #fbbf24;
+  /* yellow-400 */
+  box-shadow:
+    70px 0 0 #fbbf24,
+    /* Street 2 */
+    140px 0 0 #fbbf24,
+    /* Street 3 */
+    210px 0 0 #fbbf24,
+    /* Street 4 */
+    280px 0 0 #fbbf24,
+    /* Street 5 */
+    350px 0 0 #fbbf24,
+    /* Street 6 */
+    420px 0 0 #fbbf24,
+    /* Street 7 */
+    490px 0 0 #fbbf24,
+    /* Street 8 */
+    560px 0 0 #fbbf24,
+    /* Street 9 */
+    630px 0 0 #fbbf24,
+    /* Street 10 */
+    700px 0 0 #fbbf24,
+    /* Street 11 */
+    770px 0 0 #fbbf24;
+  /* Street 12 */
+  /* Total 12 Yellow markers (original + 11 shadows) */
+}
+
+
+/* ============================================
+   COLUMN BET (2:1) - 3 dots to the right of 34, 35, 36
+   Using ::before so green dots (::after) remain visible
+   ============================================ */
+
+/* Target last number cell in row 1 (number 36) - PURPLE dot */
+.debug-mode tr:nth-child(1) td:nth-child(24)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 350%;
+  /* <-- EDIT: increased to match gap of other rows */
+  width: 12px;
+  height: 12px;
+  background: #a855f7;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Target last number cell in row 3 (number 35) - PURPLE dot */
+.debug-mode tr:nth-child(3) td:nth-child(24)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 250%;
+  width: 12px;
+  height: 12px;
+  background: #a855f7;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Target last number cell in row 5 (number 34) - PURPLE dot */
+.debug-mode tr:nth-child(5) td:nth-child(24)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 250%;
+  width: 12px;
+  height: 12px;
+  background: #a855f7;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Hover states for debug mode */
+/* Debug hover effects removed */
+
+/* Keep purple 2:1 dots stable (don't change on hover) */
+/* Debug hover effects removed */
+
+/* Debug hover effects removed */
+
+/* Debug hover effects removed */
+
+/* Legend for debug mode */
+.debug-legend {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.95);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: white;
+  z-index: 1000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-width: 200px;
+}
+
+.debug-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.debug-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.debug-legend-line {
+  width: 16px;
+  height: 3px;
+  flex-shrink: 0;
+}
+
+.debug-legend-square {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.debug-legend-rect {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }

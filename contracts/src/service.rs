@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, Object, Schema, SimpleObject};
 use futures::lock::Mutex;
-use linera_base::identifiers::ChainId;
+
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
     linera_base_types::WithServiceAbi,
@@ -14,9 +14,9 @@ use linera_sdk::{
     Service, ServiceRuntime,
 };
 
-use contracts::{Operation, Card, GameResult, GameType, CasinoParams};
+use contracts::{Operation, Card, GameResult, GameType, CasinoParams, RouletteBet, RouletteBetType};
 
-use self::state::{ContractsState, ActiveGame, GamePhase, GameRecord, ALLOWED_BETS};
+use self::state::{ContractsState, ActiveGame, GamePhase, GameRecord, PendingRouletteGame, ALLOWED_BETS};
 
 pub struct ContractsService {
     state: Arc<Mutex<ContractsState>>,
@@ -118,6 +118,12 @@ impl QueryRoot {
     async fn allowed_bets(&self) -> Vec<u64> {
         ALLOWED_BETS.to_vec()
     }
+
+    /// Pending roulette game (if any) - for immediate result display
+    async fn pending_roulette(&self) -> Option<PendingRouletteObject> {
+        let state = self.state.lock().await;
+        state.pending_roulette.get().as_ref().map(|g| PendingRouletteObject::from(g.clone()))
+    }
 }
 
 // ============================================================================
@@ -182,6 +188,46 @@ struct GameRecordObject {
     result: GameResult,
     payout: u64,
     timestamp: u64,
+    roulette_bets: Option<Vec<RouletteBetObject>>,
+    roulette_outcome: Option<u8>,
+}
+
+#[derive(SimpleObject)]
+struct RouletteBetObject {
+    bet_type: RouletteBetType,
+    number: Option<u8>,
+    numbers: Option<Vec<u8>>,
+    amount: u64,
+}
+
+impl From<RouletteBet> for RouletteBetObject {
+    fn from(b: RouletteBet) -> Self {
+        RouletteBetObject {
+            bet_type: b.bet_type,
+            number: b.number,
+            numbers: b.numbers,
+            amount: b.amount,
+        }
+    }
+}
+
+#[derive(SimpleObject)]
+struct PendingRouletteObject {
+    game_id: u64,
+    seed: u64,
+    outcome: u8,
+    bets: Vec<RouletteBetObject>,
+}
+
+impl From<PendingRouletteGame> for PendingRouletteObject {
+    fn from(g: PendingRouletteGame) -> Self {
+        PendingRouletteObject {
+            game_id: g.game_id,
+            seed: g.seed,
+            outcome: g.outcome,
+            bets: g.bets.into_iter().map(RouletteBetObject::from).collect(),
+        }
+    }
 }
 
 impl From<GameRecord> for GameRecordObject {
@@ -195,6 +241,8 @@ impl From<GameRecord> for GameRecordObject {
             result: r.result,
             payout: r.payout,
             timestamp: r.timestamp,
+            roulette_bets: r.roulette_bets.map(|bets| bets.into_iter().map(RouletteBetObject::from).collect()),
+            roulette_outcome: r.roulette_outcome,
         }
     }
 }

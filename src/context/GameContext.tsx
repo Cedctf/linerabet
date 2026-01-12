@@ -7,6 +7,8 @@ interface GameContextType {
     lineraData: { chainId: string; address: string; balance: string; gameBalance?: number } | null;
     isConnecting: boolean;
     refreshData: () => Promise<void>;
+    pendingBet: number;
+    setPendingBet: (amount: number) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -15,6 +17,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { primaryWallet } = useDynamicContext();
     const [lineraData, setLineraData] = useState<{ chainId: string; address: string; balance: string; gameBalance?: number } | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [pendingBet, setPendingBet] = useState(0);
 
     const refreshData = useCallback(async () => {
         if (!primaryWallet || !lineraAdapter.isChainConnected()) return;
@@ -91,7 +94,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, [lineraData, refreshData]);
 
     return (
-        <GameContext.Provider value={{ lineraData, isConnecting, refreshData }}>
+        <GameContext.Provider value={{ lineraData, isConnecting, refreshData, pendingBet, setPendingBet }}>
             {children}
         </GameContext.Provider>
     );
