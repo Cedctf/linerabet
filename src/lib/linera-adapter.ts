@@ -11,7 +11,8 @@ type LineraClient = InstanceType<typeof lineraPkg.Client>;
 type LineraFaucet = InstanceType<typeof lineraPkg.Faucet>;
 type LineraWallet = Awaited<ReturnType<LineraFaucet["createWallet"]>>;
 // Note: client.application() returns a Promise<Application>
-type LineraApplication = Awaited<ReturnType<LineraClient["application"]>>;
+// Using 'any' to handle dynamic API changes in @linera/client
+type LineraApplication = any;
 
 export interface LineraProvider {
   client: LineraClient;
@@ -79,7 +80,7 @@ export class LineraAdapter {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         const signer = await new DynamicSigner(dynamicWallet);
-        const client = await new Client(wallet, signer, false);
+        const client = await new (Client as any)(wallet, signer, false);
         console.log("✅ Linera wallet created successfully!");
 
         // Debug logging
@@ -120,7 +121,7 @@ export class LineraAdapter {
     if (!appId) throw new Error("Application ID is required");
 
     // Use client.application(appId) directly (v0.15.x API)
-    const application = await this.provider.client.application(appId);
+    const application = await (this.provider.client as any).application(appId);
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");

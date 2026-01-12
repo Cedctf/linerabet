@@ -28,7 +28,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const provider = lineraAdapter.getProvider();
         let balance = "0";
         try {
-            balance = await provider.client.balance();
+            if (typeof (provider.client as any).balance === 'function') {
+                balance = await (provider.client as any).balance();
+            }
         } catch (e) {
             console.warn("Failed to fetch balance in refresh:", e);
         }
