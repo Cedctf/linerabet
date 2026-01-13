@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "🔹 Starting Linera Development Environment..."
+echo "🔹 Starting Linera Development Environment (LOCAL DEVNET)..."
 echo "   LINERA_HOME=$LINERA_HOME"
 
 # Source nvm to get node/npm
@@ -15,6 +15,7 @@ echo "🔹 Cleaning up old wallet state..."
 rm -rf /root/.config/linera
 rm -rf /data/linera/*
 mkdir -p /data/linera
+
 echo "🔹 Starting Linera Network with Faucet..."
 
 # Use linera net helper for proper process management
@@ -75,7 +76,7 @@ fi
 echo "   App ID: $APP_ID"
 
 # ========================================
-# UPDATE CONSTANTS (portable Node.js approach)
+# UPDATE CONSTANTS
 # ========================================
 echo "🔹 Updating src/constants.ts..."
 node /app/docker/update-constants.mjs "$APP_ID" "$CHAIN_ID"
@@ -100,7 +101,7 @@ npm install
 # ========================================
 echo "🔹 Starting frontend server..."
 echo "========================================"
-echo "🎰 Casino is running!"
+echo "🎰 Casino is running! (LOCAL DEVNET)"
 echo "   Frontend: http://localhost:5173"
 echo "   Faucet:   http://localhost:8080"
 echo "   Service:  http://localhost:8081"
@@ -108,11 +109,4 @@ echo "   App ID:   $APP_ID"
 echo "   Chain ID: $CHAIN_ID"
 echo "========================================"
 
-# Use pre-built dist if available, otherwise dev server
-if [ -d "/app/dist" ]; then
-    echo "✅ Using pre-built static files (faster)"
-    npm run preview -- --host 0.0.0.0 --port 5173
-else
-    echo "⚠️ No pre-built files, using dev server"
-    npm run dev -- --host 0.0.0.0
-fi
+npm run dev -- --host 0.0.0.0

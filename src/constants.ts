@@ -1,24 +1,14 @@
-// Determine base URL - use current host for deployed version, localhost for local dev
-const isLocalDev = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
-// For deployed version, use the same domain with /faucet and /api proxies
-// For local dev, use localhost directly
-export const LINERA_FAUCET_URL = isLocalDev
-    ? "http://localhost:8080"
-    : `${window.location.origin}/faucet`;
-
-export const LINERA_SERVICE_URL = isLocalDev
-    ? "http://localhost:8081"
-    : `${window.location.origin}/api`;
+// Local Devnet URLs
+export const LINERA_FAUCET_URL = "http://localhost:8080";
+export const LINERA_SERVICE_URL = "http://localhost:8081";
 
 // Legacy alias
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
 // Cross-chain casino app
-// Same app deployed once - the bank_chain_id is in Application Parameters
-export const APP_ID = "74b7491ca9d1b7eb49b260ebbe8acaaa6e67011772915daa737664bba5962020";
-export const BANK_CHAIN_ID = "22a92babed77fbddef55307c876673f74dd5250fea77405087f70af698ec199b";
+// These will be auto-updated by entrypoint.sh when running in Docker
+export const APP_ID = "PLACEHOLDER_APP_ID";
+export const BANK_CHAIN_ID = "PLACEHOLDER_BANK_CHAIN_ID";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;
