@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
-import { DEPLOYER_ADDRESS, CONTRACTS_APP_ID } from '../constants';
+import { CONTRACTS_APP_ID, NETWORK_NAME, isTestnet } from '../constants';
 import ConfirmationModal from './ConfirmationModal';
 import { useGame } from '../context/GameContext';
 
@@ -10,6 +10,7 @@ export default function ConnectWallet() {
     const { lineraData, isConnecting, refreshData, pendingBet, balanceLocked } = useGame();
     const [isBuying, setIsBuying] = useState(false);
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+    const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
     // Note: Connection logic is now handled in GameContext
 
@@ -20,24 +21,11 @@ export default function ConnectWallet() {
 
         setIsBuying(true);
         try {
-            const chainId = lineraAdapter.getProvider().chainId;
 
             // Ensure application is set
             if (!lineraAdapter.isApplicationSet()) {
                 await lineraAdapter.setApplication(CONTRACTS_APP_ID);
             }
-
-            // 1. Transfer 1 token to deployer (API enforces whole tokens via u64)
-            // 1. Transfer skipped to simplify UX (devnet/testnet faucet)
-            /*
-            await lineraAdapter.client.transfer({
-                recipient: {
-                    chain_id: chainId,
-                    owner: DEPLOYER_ADDRESS,
-                },
-                amount: 1,
-            });
-            */
 
             // 2. Request chips from contract
             const mutation = `mutation { requestChips }`;
@@ -84,7 +72,12 @@ export default function ConnectWallet() {
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setIsBuyModalOpen(true);
+                                // Check if balance is 0, show low balance modal instead
+                                if (lineraData && parseFloat(lineraData.balance) === 0) {
+                                    setShowLowBalanceModal(true);
+                                } else {
+                                    setIsBuyModalOpen(true);
+                                }
                             }}
                             className="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 hover:bg-green-500 text-white shadow-sm hover:scale-110 transition-all"
                             title="Buy Chips"
@@ -107,10 +100,20 @@ export default function ConnectWallet() {
 
                 {/* Dropdown */}
                 {isDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-black/90 border border-green-500/30 rounded-xl shadow-xl backdrop-blur-xl overflow-hidden z-50">
+                    <div className="absolute top-full right-0 mt-2 w-72 bg-black/90 border border-green-500/30 rounded-xl shadow-xl backdrop-blur-xl overflow-hidden z-50">
                         <div className="p-4 space-y-3">
+                            {/* Network Status */}
+                            <div className="flex items-center gap-2 pb-2 border-b border-white/10">
+                                <div className={`w-2 h-2 rounded-full ${isTestnet ? 'bg-purple-500' : 'bg-green-500'} animate-pulse`} />
+                                <span className={`text-xs font-semibold uppercase tracking-wider ${isTestnet ? 'text-purple-400' : 'text-green-400'}`}>
+                                    Connected to {NETWORK_NAME}
+                                </span>
+                            </div>
+
                             <div className="space-y-1">
-                                <label className="text-xs text-gray-400 uppercase tracking-wider">Testnet Balance</label>
+                                <label className="text-xs text-gray-400 uppercase tracking-wider">
+                                    {isTestnet ? 'Testnet' : 'Devnet'} Balance
+                                </label>
                                 <div className="text-purple-400 font-mono text-sm font-semibold truncate">
                                     {lineraData.balance}
                                 </div>
@@ -126,6 +129,7 @@ export default function ConnectWallet() {
                     </div>
                 )}
 
+                {/* Buy Chips Modal */}
                 <ConfirmationModal
                     isOpen={isBuyModalOpen}
                     title="Confirm Chip Purchase"
@@ -141,6 +145,28 @@ After Purchase:
                     onConfirm={handleBuyChips}
                     onCancel={() => setIsBuyModalOpen(false)}
                     isLoading={isBuying}
+                />
+
+                {/* Low Balance Warning Modal */}
+                <ConfirmationModal
+                    isOpen={showLowBalanceModal}
+                    title="⚠️ Waiting for Funds"
+                    message={`Your ${isTestnet ? 'testnet' : 'devnet'} balance is currently 0.
+
+Current Balance:
+• ${lineraData.balance} Test Tokens
+• ${lineraData.gameBalance} Chips
+
+${isTestnet
+                            ? "The faucet is sending you tokens. Please wait a few seconds and try again."
+                            : "The local faucet is initializing. Please wait a few seconds for the network to be ready."}`}
+                    onConfirm={() => {
+                        refreshData();
+                        setShowLowBalanceModal(false);
+                    }}
+                    onCancel={() => setShowLowBalanceModal(false)}
+                    confirmText="Refresh Balance"
+                    cancelText="Dismiss"
                 />
             </div>
         );

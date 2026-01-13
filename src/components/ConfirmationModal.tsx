@@ -8,6 +8,8 @@ interface ConfirmationModalProps {
     onConfirm: () => void;
     onCancel: () => void;
     isLoading?: boolean;
+    confirmText?: string;
+    cancelText?: string;
 }
 
 export default function ConfirmationModal({
@@ -16,7 +18,9 @@ export default function ConfirmationModal({
     message,
     onConfirm,
     onCancel,
-    isLoading = false
+    isLoading = false,
+    confirmText = 'Confirm',
+    cancelText = 'Cancel'
 }: ConfirmationModalProps) {
     if (!isOpen) return null;
 
@@ -39,7 +43,7 @@ export default function ConfirmationModal({
                         disabled={isLoading}
                         className="px-4 py-2 text-gray-400 hover:text-white font-semibold transition-colors disabled:opacity-50"
                     >
-                        Cancel
+                        {cancelText}
                     </button>
                     <button
                         onClick={onConfirm}
@@ -52,7 +56,7 @@ export default function ConfirmationModal({
                                 Processing...
                             </>
                         ) : (
-                            'Confirm'
+                            confirmText
                         )}
                     </button>
                 </div>

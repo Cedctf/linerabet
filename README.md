@@ -52,6 +52,28 @@ docker compose logs -f
 3. Uncomment `image: ilovetofu/linera-casino:latest`
 4. Run `docker compose up -d`
 
+**Alternative: Run without Docker using deploy.sh:**
+
+> ⚠️ This will wipe your Linera wallet! Back up first if needed.
+
+```bash
+# Clone the repository
+git clone https://github.com/Cedctf/linerabet.git
+cd linerabet
+
+# Make script executable and run
+chmod +x deploy.sh
+./deploy.sh
+
+# When prompted, type: Yes I Understand
+```
+
+This script will:
+1. Start a local devnet
+2. Build and deploy contracts
+3. Update constants.ts automatically
+4. Start linera service and frontend
+
 ---
 
 ### Option 2: Testnet Mode (For Remote Deployment)
@@ -92,12 +114,45 @@ npm run dev
 
 **Building & Deploying Contracts:**
 
+#### Deploy to Local Devnet
+
 ```bash
 # Build contracts
 cd contracts
 cargo build --release --target wasm32-unknown-unknown
+cd ..
 
-# Deploy to testnet
+# Start local devnet with faucet
+linera net up --with-faucet --faucet-port 8080 --testing-prng-seed 37 &
+
+# Wait for network to start, then initialize wallet
+sleep 5
+linera wallet init --faucet http://localhost:8080
+linera wallet request-chain --faucet http://localhost:8080
+
+# Get your chain ID
+CHAIN_ID=$(linera wallet show | grep "Chain ID:" | head -n 1 | awk '{print $3}')
+
+# Deploy application
+linera publish-and-create \
+  contracts/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
+  contracts/target/wasm32-unknown-unknown/release/contracts_service.wasm \
+  --json-parameters '{"bank_chain_id": "'$CHAIN_ID'"}' \
+  --json-argument '{"starting_balance": 100, "random_seed": 12345}'
+
+# Start linera service (processes cross-chain messages)
+linera service --port 8081
+```
+
+#### Deploy to Conway Testnet
+
+```bash
+# Build contracts
+cd contracts
+cargo build --release --target wasm32-unknown-unknown
+cd ..
+
+# Initialize wallet with testnet faucet
 linera wallet init --faucet https://faucet.testnet-conway.linera.net
 linera wallet request-chain --faucet https://faucet.testnet-conway.linera.net
 
@@ -106,10 +161,13 @@ CHAIN_ID=$(linera wallet show | grep "Chain ID:" | head -n 1 | awk '{print $3}')
 
 # Deploy application
 linera publish-and-create \
-  target/wasm32-unknown-unknown/release/contracts_contract.wasm \
-  target/wasm32-unknown-unknown/release/contracts_service.wasm \
+  contracts/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
+  contracts/target/wasm32-unknown-unknown/release/contracts_service.wasm \
   --json-parameters '{"bank_chain_id": "'$CHAIN_ID'"}' \
   --json-argument '{"starting_balance": 100, "random_seed": 12345}'
+
+# Start linera service (processes cross-chain messages)
+linera service --port 8081
 ```
 
 Update `src/constants.ts` with the new `APP_ID` and `BANK_CHAIN_ID`.
