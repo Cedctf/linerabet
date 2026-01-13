@@ -7,6 +7,8 @@ interface ConfirmationModalProps {
     onConfirm: () => void;
     onCancel: () => void;
     isLoading?: boolean;
+    confirmText?: string;
+    cancelText?: string;
 }
 
 export default function ConfirmationModal({
@@ -15,7 +17,9 @@ export default function ConfirmationModal({
     message,
     onConfirm,
     onCancel,
-    isLoading = false
+    isLoading = false,
+    confirmText = 'Confirm',
+    cancelText = 'Cancel'
 }: ConfirmationModalProps) {
     if (!isOpen) return null;
 

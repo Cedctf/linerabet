@@ -54,7 +54,7 @@ docker compose logs -f
 
 **Alternative: Run without Docker using deploy.sh:**
 
->⚠️ This will wipe your Linera wallet! Back up first if needed.
+> ⚠️ This will wipe your Linera wallet! Back up first if needed.
 
 ```bash
 # Clone the repository
