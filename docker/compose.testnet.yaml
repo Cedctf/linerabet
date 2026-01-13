@@ -1,0 +1,18 @@
+# Docker Compose for TESTNET (for remote deployment like linera.click)
+# Usage: docker compose -f docker/compose.testnet.yaml up -d
+
+services:
+  linera-casino:
+    container_name: linera-casino
+    image: ilovetofu/linera-casino:latest
+    ports:
+      - "5173:5173"  # Frontend only
+    volumes:
+      - ..:/app
+    entrypoint: ["/bin/bash", "/app/docker/entrypoint-testnet.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

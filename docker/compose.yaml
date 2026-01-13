@@ -1,44 +1,37 @@
-services:
-  # Default: Interactive dev container - stays running for manual setup
-  linera-dev:
-    build: .
-    container_name: linera-dev
-    ports:
-      - "5173:5173"   # Frontend dev server
-      - "8080:8080"   # Linera faucet
-      - "8081:8081"   # Linera service (GraphQL)
-      - "9001:9001"   # Validator proxy
-      - "13001:13001" # Validator shard
-    volumes:
-      # Mount your code (parent directory of docker/)
-      - ..:/app
-      # Persistent Linera state - ISOLATED from host ~/.config/linera
-      - linera-data:/data/linera
-    environment:
-      - LINERA_HOME=/data/linera
-    stdin_open: true
-    tty: true
+# Docker Compose for LOCAL DEVNET (for buildathon judges)
+#
+# USAGE OPTIONS:
+#
+# Option 1: Build from source (recommended for judges)
+#   docker compose up -d
+#
+# Option 2: Pull pre-built image from DockerHub (faster)
+#   Uncomment the 'image:' line below and comment out 'build: .'
+#   docker compose up -d
 
-  # Alternative: Auto-deploy mode (runs everything automatically)
-  linera-auto:
+services:
+  linera-casino:
+    container_name: linera-casino
     build: .
-    container_name: linera-auto
-    profiles: ["auto"]
+    # image: ilovetofu/linera-casino:latest  # Uncomment to use DockerHub image
     ports:
-      - "5173:5173"
-      - "8080:8080"
-      - "8081:8081"
-      - "9001:9001"
-      - "13001:13001"
+      - "5173:5173"  # Frontend
+      - "8080:8080"  # Faucet
+      - "8081:8081"  # Linera Service
+      - "9001:9001"  # Validator
+      - "13001:13001"  # Proxy
     volumes:
       - ..:/app
       - linera-data:/data/linera
     environment:
       - LINERA_HOME=/data/linera
-    stdin_open: true
-    tty: true
-    command: bash /app/docker/entrypoint.sh
+    entrypoint: ["/bin/bash", "/app/docker/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
 volumes:
   linera-data:
-    name: linera-casino-data
