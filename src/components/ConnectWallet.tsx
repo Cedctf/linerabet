@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
@@ -12,13 +12,6 @@ export default function ConnectWallet() {
     const [isBuying, setIsBuying] = useState(false);
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
     const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
-
-    // Check for low balance and show warning
-    useEffect(() => {
-        if (lineraData && parseFloat(lineraData.balance) === 0) {
-            setShowLowBalanceModal(true);
-        }
-    }, [lineraData]);
 
     const handleBuyChips = async () => {
         setIsBuying(true);
@@ -118,7 +111,12 @@ export default function ConnectWallet() {
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    setIsBuyModalOpen(true);
+                                    // Show low balance modal if testnet balance is 0
+                                    if (lineraData && parseFloat(lineraData.balance) === 0) {
+                                        setShowLowBalanceModal(true);
+                                    } else {
+                                        setIsBuyModalOpen(true);
+                                    }
                                 }}
                                 className="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 hover:bg-green-500 text-white shadow-sm hover:scale-110 transition-all"
                                 title="Buy Chips"
