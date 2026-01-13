@@ -1,24 +1,15 @@
-// Determine base URL - use current host for deployed version, localhost for local dev
-const isLocalDev = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+// Conway Testnet Faucet
+export const LINERA_FAUCET_URL = "https://faucet.testnet-conway.linera.net";
 
-// For deployed version, use the same domain with /faucet and /api proxies
-// For local dev, use localhost directly
-export const LINERA_FAUCET_URL = isLocalDev
-    ? "http://localhost:8080"
-    : `${window.location.origin}/faucet`;
-
-export const LINERA_SERVICE_URL = isLocalDev
-    ? "http://localhost:8081"
-    : `${window.location.origin}/api`;
+// Testnet Service endpoint (for GraphQL queries)
+export const LINERA_SERVICE_URL = "https://faucet.testnet-conway.linera.net";
 
 // Legacy alias
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
-// Cross-chain casino app
-// Same app deployed once - the bank_chain_id is in Application Parameters
-export const APP_ID = "74b7491ca9d1b7eb49b260ebbe8acaaa6e67011772915daa737664bba5962020";
-export const BANK_CHAIN_ID = "22a92babed77fbddef55307c876673f74dd5250fea77405087f70af698ec199b";
+// Cross-chain casino app - Deployed to Conway Testnet
+export const APP_ID = "08431ebaa96b7ac0614381fd7b67ab63e68873772fcf7e21db53990ebae8fc69";
+export const BANK_CHAIN_ID = "e0d81316b9a93769260320dec01aafd06cf3dbeecdb632b04b63c2c4c7f81ecd";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;
