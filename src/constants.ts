@@ -6,8 +6,8 @@ export const NETWORK_NAME = isTestnet ? 'Conway Testnet' : 'Local Devnet';
 
 // URL configuration based on environment
 export const LINERA_FAUCET_URL = isTestnet
-    ? `${window.location.origin}/faucet`   // Testnet via nginx proxy
-    : "http://localhost:8080";              // Local devnet
+    ? "https://faucet.testnet-conway.linera.net"  // Direct testnet faucet
+    : "http://localhost:8080";                     // Local devnet
 
 export const LINERA_SERVICE_URL = isTestnet
     ? `${window.location.origin}/api`       // Testnet via nginx proxy
