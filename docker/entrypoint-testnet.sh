@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "🔹 Starting Linera Development Environment (LOCAL DEVNET)..."
-echo "   LINERA_HOME=$LINERA_HOME"
+echo "🔹 Starting Linera Casino (TESTNET MODE)..."
 
 # Source nvm to get node/npm
 export NVM_DIR="$HOME/.nvm"
@@ -10,43 +9,19 @@ export NVM_DIR="$HOME/.nvm"
 
 cd /app
 
-# Clean up any existing wallet (for fresh start)
-echo "🔹 Cleaning up old wallet state..."
+# ========================================
+# INITIALIZE WALLET FOR TESTNET
+# ========================================
+echo "🔹 Setting up testnet wallet..."
 rm -rf /root/.config/linera
-rm -rf /data/linera/*
-mkdir -p /data/linera
 
-echo "🔹 Starting Linera Network with Faucet..."
-
-# Use linera net helper for proper process management
-eval "$(linera net helper)"
-linera_spawn linera net up --with-faucet --faucet-port 8080 --testing-prng-seed 37
-
-export LINERA_FAUCET_URL=http://localhost:8080
-
-# Wait for faucet to be ready
-echo "   Waiting for faucet to be ready..."
-count=0
-while ! curl -s http://localhost:8080 > /dev/null 2>&1; do
-    sleep 1
-    count=$((count+1))
-    if [ $count -ge 60 ]; then
-        echo "❌ Faucet timed out!"
-        exit 1
-    fi
-done
-echo "✅ Faucet is ready!"
-
-# ========================================
-# INITIALIZE WALLET
-# ========================================
-echo "🔹 Initializing wallet..."
-linera wallet init --faucet="$LINERA_FAUCET_URL"
-linera wallet request-chain --faucet="$LINERA_FAUCET_URL"
+# Initialize with testnet faucet
+linera wallet init --faucet https://faucet.testnet-conway.linera.net
+linera wallet request-chain --faucet https://faucet.testnet-conway.linera.net
 
 # Get Chain ID
 CHAIN_ID=$(linera wallet show | grep "Chain ID:" | head -n 1 | awk '{print $3}' | tr -d '\r\n')
-echo "   Chain ID: $CHAIN_ID"
+echo "   Bank Chain ID: $CHAIN_ID"
 
 # ========================================
 # BUILD CONTRACTS
@@ -57,9 +32,9 @@ cargo build --release --target wasm32-unknown-unknown
 cd /app
 
 # ========================================
-# DEPLOY APPLICATION
+# DEPLOY APPLICATION TO TESTNET
 # ========================================
-echo "🔹 Deploying application..."
+echo "🔹 Deploying application to testnet..."
 DEPLOY_OUTPUT=$(linera publish-and-create \
   contracts/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
   contracts/target/wasm32-unknown-unknown/release/contracts_service.wasm \
@@ -83,17 +58,17 @@ node /app/docker/update-constants.mjs "$APP_ID" "$CHAIN_ID"
 echo "✅ Constants updated!"
 
 # ========================================
-# START LINERA SERVICE
+# START LINERA SERVICE (processes cross-chain messages)
 # ========================================
 echo "🔹 Starting Linera Service on port 8081..."
 linera service --port 8081 > /app/service.log 2>&1 &
 sleep 2
+echo "✅ Linera Service started!"
 
 # ========================================
 # INSTALL FRONTEND DEPENDENCIES
 # ========================================
 echo "🔹 Installing frontend dependencies..."
-cd /app
 npm install
 
 # ========================================
@@ -101,12 +76,18 @@ npm install
 # ========================================
 echo "🔹 Starting frontend server..."
 echo "========================================"
-echo "🎰 Casino is running! (LOCAL DEVNET)"
+echo "🎰 Casino is running on Conway Testnet!"
 echo "   Frontend: http://localhost:5173"
-echo "   Faucet:   http://localhost:8080"
 echo "   Service:  http://localhost:8081"
 echo "   App ID:   $APP_ID"
-echo "   Chain ID: $CHAIN_ID"
+echo "   Bank Chain: $CHAIN_ID"
 echo "========================================"
 
-npm run dev -- --host 0.0.0.0
+# Use pre-built dist if available, otherwise dev server
+if [ -d "/app/dist" ]; then
+    echo "✅ Using pre-built static files (faster)"
+    npm run preview -- --host 0.0.0.0 --port 5173
+else
+    echo "⚠️ No pre-built files, using dev server"
+    npm run dev -- --host 0.0.0.0
+fi
