@@ -1,14 +1,15 @@
-// Local Devnet URLs
-export const LINERA_FAUCET_URL = "http://localhost:8080";
-export const LINERA_SERVICE_URL = "http://localhost:8081";
+// Conway Testnet Faucet
+export const LINERA_FAUCET_URL = "https://faucet.testnet-conway.linera.net";
+
+// Testnet Service endpoint (for GraphQL queries)
+export const LINERA_SERVICE_URL = "https://faucet.testnet-conway.linera.net";
 
 // Legacy alias
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
-// Cross-chain casino app
-// These will be auto-updated by entrypoint.sh when running in Docker
-export const APP_ID = "PLACEHOLDER_APP_ID";
-export const BANK_CHAIN_ID = "PLACEHOLDER_BANK_CHAIN_ID";
+// Cross-chain casino app - Deployed to Conway Testnet
+export const APP_ID = "09f21226e3147c1b8349598c96204a559885901e66d374d8cba75789f25841a8";
+export const BANK_CHAIN_ID = "e889dc72e14b30b32a2362d19df3bd5ef3b24d9b62df13dcb3882906b4fb9166";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;
