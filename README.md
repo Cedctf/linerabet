@@ -250,7 +250,7 @@ Linera Casino uses a **dual-chain architecture** where users interact on their o
 
 ---
 
-### � Blackjack Game Flow
+###   Blackjack Game Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
