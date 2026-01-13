@@ -1,8 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Exit on error
 set -e
 
+# ============================================================================
+# ⚠️  WARNING: This script will wipe your Linera wallet!
+# ============================================================================
+echo ""
+echo "╔════════════════════════════════════════════════════════════════════════╗"
+echo "║                          ⚠️  CAUTION ⚠️                                 ║"
+echo "╠════════════════════════════════════════════════════════════════════════╣"
+echo "║  This script will:                                                     ║"
+echo "║    1. Kill all running Linera processes                                ║"
+echo "║    2. DELETE your Linera wallet (~/.config/linera)                     ║"
+echo "║    3. Start a fresh LOCAL DEVNET                                       ║"
+echo "║                                                                        ║"
+echo "║  Any existing wallet, chains, or deployed apps will be LOST!           ║"
+echo "║                                                                        ║"
+echo "║  If you have a testnet wallet you want to keep, BACK IT UP FIRST:      ║"
+echo "║    cp -r ~/.config/linera ~/.config/linera.backup                      ║"
+echo "╚════════════════════════════════════════════════════════════════════════╝"
+echo ""
+echo -n "Type 'YES I UNDERSTAND' to continue: "
+read CONFIRM
+
+if [ "$CONFIRM" != "YES I UNDERSTAND" ]; then
+    echo "❌ Aborted. Your wallet is safe."
+    exit 0
+fi
+
+echo ""
 echo "🔹 Cleaning up old processes..."
 pkill -f linera || true
 rm -rf ~/.config/linera
@@ -28,9 +55,7 @@ linera wallet init --faucet http://localhost:8080
 linera wallet request-chain --faucet http://localhost:8080
 
 echo "🔹 Fetching Chain ID..."
-# Extract chain ID from 'linera wallet show' (assuming it's the first hex string or using grep)
-# 'linera wallet show' output format:
-# Chain ID: 6b70...
+# Extract chain ID from 'linera wallet show' (works on Mac and Linux)
 CHAIN_ID=$(linera wallet show | grep "Chain ID:" | head -n 1 | awk '{print $3}' | tr -d '\r\n')
 echo "   Chain ID: $CHAIN_ID"
 
@@ -41,7 +66,6 @@ cd ..
 
 echo "🔹 Deploying Application..."
 # We need to capture the output to get the App ID
-# The command output usually ends with "Created application <APP_ID>"
 DEPLOY_OUTPUT=$(linera publish-and-create \
   contracts/target/wasm32-unknown-unknown/release/contracts_contract.wasm \
   contracts/target/wasm32-unknown-unknown/release/contracts_service.wasm \
@@ -50,8 +74,7 @@ DEPLOY_OUTPUT=$(linera publish-and-create \
 
 echo "$DEPLOY_OUTPUT"
 
-# Extract App ID. It's usually the last word of the output "Created application <APP_ID>"
-# User confirmed the last line is the App ID
+# Extract App ID - last line of output
 APP_ID=$(echo "$DEPLOY_OUTPUT" | tail -n 1 | tr -d '\r\n')
 
 if [ -z "$APP_ID" ]; then
@@ -62,13 +85,11 @@ fi
 echo "   App ID: $APP_ID"
 
 echo "🔹 Updating src/constants.ts..."
-# Update constants.ts
 CONSTANTS_FILE="src/constants.ts"
 
-# Use sed to replace the values
-# Note: simple sed might fail if file doesn't match exactly, but based on user file it should work
-sed -i "s/export const APP_ID = \".*\";/export const APP_ID = \"$APP_ID\";/" "$CONSTANTS_FILE"
-sed -i "s/export const BANK_CHAIN_ID = \".*\";/export const BANK_CHAIN_ID = \"$CHAIN_ID\";/" "$CONSTANTS_FILE"
+# Use sed to replace the values (Linux/WSL)
+sed -i "s/: \"PLACEHOLDER_APP_ID\"/: \"$APP_ID\"/" "$CONSTANTS_FILE"
+sed -i "s/: \"PLACEHOLDER_BANK_CHAIN_ID\"/: \"$CHAIN_ID\"/" "$CONSTANTS_FILE"
 
 echo "✅ Configuration updated!"
 echo "   APP_ID: $APP_ID"
