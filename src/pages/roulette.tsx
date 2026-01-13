@@ -25,6 +25,7 @@ const RoulettePage = () => {
   const [winningNumber, setWinningNumber] = useState<any>({ next: null });
   const [history, setHistory] = useState<number[]>([]);
   const [lastWinAmount, setLastWinAmount] = useState(0);
+  const [lastBets, setLastBets] = useState<Map<string, number>>(new Map());
 
   const [busy, setBusy] = useState(false);
 
@@ -134,6 +135,19 @@ const RoulettePage = () => {
     setPlacedBets(new Map());
   };
 
+  const repeatBet = () => {
+    if (stage !== GameStages.PLACE_BET || lastBets.size === 0 || busy) return;
+
+    // Check if we have enough balance for the last bet
+    const lastBetTotal = Array.from(lastBets.values()).reduce((acc, amt) => acc + amt, 0);
+    if (isConnected && serverBalance < lastBetTotal) {
+      alert(`Insufficient balance! Need $${lastBetTotal} but only have $${serverBalance}`);
+      return;
+    }
+
+    setPlacedBets(new Map(lastBets));
+  };
+
   const spin = async () => {
     setBusy(true);
     setStage(GameStages.NO_MORE_BETS);
@@ -233,6 +247,9 @@ const RoulettePage = () => {
       const initialCount = initialData.gameHistory
         ? initialData.gameHistory.filter((g: any) => g.gameType === "ROULETTE").length
         : 0;
+
+      // Save current bets for repeat functionality
+      setLastBets(new Map(placedBets));
 
       const mutation = `mutation { playRoulette(bets: [${betsString}]) }`;
       await lineraAdapter.mutate(mutation);
@@ -428,6 +445,14 @@ const RoulettePage = () => {
                       alt="Clear Bets"
                       className="w-full h-full object-contain"
                     />
+                  </button>
+                  <button
+                    onClick={repeatBet}
+                    disabled={stage !== GameStages.PLACE_BET || lastBets.size === 0 || busy}
+                    className="hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg border border-purple-400/50"
+                    title="Repeat last bet"
+                  >
+                    🔁 Repeat
                   </button>
                   <button
                     onClick={spin}

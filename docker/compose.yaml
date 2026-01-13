@@ -1,10 +1,19 @@
 # Docker Compose for LOCAL DEVNET (for buildathon judges)
-# Usage: docker compose up -d
+#
+# USAGE OPTIONS:
+#
+# Option 1: Build from source (recommended for judges)
+#   docker compose up -d
+#
+# Option 2: Pull pre-built image from DockerHub (faster)
+#   Uncomment the 'image:' line below and comment out 'build: .'
+#   docker compose up -d
 
 services:
   linera-casino:
     container_name: linera-casino
     build: .
+    # image: ilovetofu/linera-casino:latest  # Uncomment to use DockerHub image
     ports:
       - "5173:5173"  # Frontend
       - "8080:8080"  # Faucet
