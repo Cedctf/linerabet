@@ -12,7 +12,7 @@ const DEVNET_CONFIG = {
 
 const TESTNET_CONFIG = {
     faucetUrl: "https://faucet.testnet-conway.linera.net",
-    serviceUrl: "https://faucet.testnet-conway.linera.net",
+    serviceUrl: "http://localhost:8081",
 };
 
 const config = NETWORK_MODE === "devnet" ? DEVNET_CONFIG : TESTNET_CONFIG;
