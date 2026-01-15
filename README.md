@@ -170,7 +170,22 @@ linera publish-and-create \
 linera service --port 8081
 ```
 
-Update `src/constants.ts` with the new `APP_ID` and `BANK_CHAIN_ID`.
+**Update `src/constants.ts` manually or use the helper script:**
+
+```bash
+# For devnet (localhost URLs)
+node docker/update-constants.mjs "$APP_ID" "$CHAIN_ID" "devnet"
+
+# For testnet (Conway testnet URLs)
+node docker/update-constants.mjs "$APP_ID" "$CHAIN_ID" "testnet"
+```
+
+> **Manual Configuration:** If not using the script, edit `.env.local` and set:
+> - `VITE_NETWORK_MODE` - Set to `devnet` (localhost URLs) or `testnet` (Conway testnet URLs)
+>
+> Then edit `src/constants.ts` and set:
+> - `APP_ID` - Your deployed application ID
+> - `BANK_CHAIN_ID` - Your bank chain ID
 
 ---
 

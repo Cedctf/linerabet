@@ -76,11 +76,11 @@ fi
 echo "   App ID: $APP_ID"
 
 # ========================================
-# UPDATE CONSTANTS
+# UPDATE ENVIRONMENT VARIABLES
 # ========================================
-echo "🔹 Updating src/constants.ts..."
-node /app/docker/update-constants.mjs "$APP_ID" "$CHAIN_ID"
-echo "✅ Constants updated!"
+echo "🔹 Updating .env.local..."
+node /app/docker/update-constants.mjs "$APP_ID" "$CHAIN_ID" "devnet"
+echo "✅ Environment updated!"
 
 # ========================================
 # START LINERA SERVICE
