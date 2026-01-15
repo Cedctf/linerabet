@@ -29,13 +29,13 @@ This runs a complete local Linera network in Docker. **Faster than testnet** bec
 ```bash
 # Clone the repository
 git clone https://github.com/Cedctf/linerabet.git
-cd linerabet/docker
+cd linerabet
 
 # Build and run (first time may take a few minutes)
-docker compose up -d
+docker compose -f docker/compose.yaml up --build -d
 
 # View logs - wait for "Casino is running!"
-docker compose logs -f
+docker compose -f docker/compose.yaml logs -f
 ```
 
 **Services available at:**
@@ -88,7 +88,7 @@ git clone https://github.com/Cedctf/linerabet.git
 cd linerabet/docker
 
 # Run testnet mode
-docker compose -f compose.testnet.yaml up -d
+docker compose -f compose.testnet.yaml up --build -d
 
 # View logs
 docker compose -f compose.testnet.yaml logs -f
