@@ -1,15 +1,30 @@
-// Conway Testnet Faucet
-export const LINERA_FAUCET_URL = "https://faucet.testnet-conway.linera.net";
+// Network configuration - reads from environment variables
+// Set automatically by Docker entrypoints or manually in .env.local
 
-// Testnet Service endpoint (for GraphQL queries)
-export const LINERA_SERVICE_URL = "https://faucet.testnet-conway.linera.net";
+// Network mode: "devnet" or "testnet"
+const NETWORK_MODE = import.meta.env.VITE_NETWORK_MODE || "testnet";
 
-// Legacy alias
+// Network-specific URLs based on mode
+const DEVNET_CONFIG = {
+    faucetUrl: "http://localhost:8080",
+    serviceUrl: "http://localhost:8081",
+};
+
+const TESTNET_CONFIG = {
+    faucetUrl: "https://faucet.testnet-conway.linera.net",
+    serviceUrl: "https://faucet.testnet-conway.linera.net",
+};
+
+const config = NETWORK_MODE === "devnet" ? DEVNET_CONFIG : TESTNET_CONFIG;
+
+// Exported constants - URLs determined by network mode
+export const LINERA_FAUCET_URL = config.faucetUrl;
+export const LINERA_SERVICE_URL = config.serviceUrl;
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
-// Cross-chain casino app - Deployed to Conway Testnet
-export const APP_ID = "47c7bb8f9c2abc3034987b26a74e253d10d428a59b1841a51d890096b7920081";
-export const BANK_CHAIN_ID = "90ead791587f13e62e3fe5bf4e44471b5e0c9658db88a0a412d4d9329b190d81";
+// Application IDs - replaced by docker/update-constants.mjs
+export const APP_ID = "09944ad5e700e0d5bddfb52d02cc60e47449512d1308747b9356c4b91d5f1784";
+export const BANK_CHAIN_ID = "5c2f5406ea1608532a824c0f58549a3cd3ca66c099e18457681f88195299da22";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;
