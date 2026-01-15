@@ -23,8 +23,8 @@ export const LINERA_SERVICE_URL = config.serviceUrl;
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
 // Application IDs - replaced by docker/update-constants.mjs
-export const APP_ID = "09944ad5e700e0d5bddfb52d02cc60e47449512d1308747b9356c4b91d5f1784";
-export const BANK_CHAIN_ID = "5c2f5406ea1608532a824c0f58549a3cd3ca66c099e18457681f88195299da22";
+export const APP_ID = "3d9cc75aa22d6eecface7f5f471d0e72b7da19faf848af764ae1ae99e82d90ef";
+export const BANK_CHAIN_ID = "df4a3b4338cb1e15c2fef183296228b089022b4ad723a9801e4c6508da29da01";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;

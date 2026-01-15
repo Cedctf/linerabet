@@ -129,23 +129,35 @@ export class LineraAdapter {
     if (!this.provider) throw new Error("Not connected to Linera");
     if (!appId) throw new Error("Application ID is required");
 
-    // Use client.frontend().application(appId) per official docs
-    const application = await (this.provider.client as any).frontend().application(appId);
+    console.log("🔍 Attempting to set application with ID:", appId);
+    console.log("🔍 Using chain ID:", this.provider.chainId);
 
-    if (!application) throw new Error("Failed to get application");
-    console.log("✅ Linera application set successfully!");
-
-    // Debug logging
     try {
-      console.log("🔍 Application keys:", Object.keys(application));
-      console.log("🔍 Application prototype:", Object.getPrototypeOf(application));
-    } catch (e) {
-      console.warn("Could not inspect application:", e);
-    }
+      // The correct API pattern is: client.chain(chainId).application(appId)
+      const chain = await (this.provider.client as any).chain(this.provider.chainId);
+      console.log("✅ Got chain object:", chain);
+      console.log("🔍 Chain methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(chain)));
 
-    this.application = application;
-    this.appId = appId;
-    this.notifyListeners();
+      const application = await chain.application(appId);
+
+      if (!application) throw new Error("Failed to get application from chain");
+      console.log("✅ Linera application set successfully!");
+
+      // Debug logging
+      try {
+        console.log("🔍 Application keys:", Object.keys(application));
+        console.log("🔍 Application methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(application)));
+      } catch (e) {
+        console.warn("Could not inspect application:", e);
+      }
+
+      this.application = application;
+      this.appId = appId;
+      this.notifyListeners();
+    } catch (error) {
+      console.error("❌ Failed to set application:", error);
+      throw new Error(`Failed to set application: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   getAppId(): string | null {
