@@ -1,0 +1,1 @@
+import{a6 as r,$ as o,a7 as s}from"./index-DEu_5OHm.js";import"./linera_web-CLe6Jbo_.js";const g=async e=>{const i=r.getPublicKey(e.privateKey,!0),t=o(i);if(t!=e.publicKey)throw new Error(`Bad API key. Expected to get public key ${e.publicKey}, got ${t}`);const a=s().update(e.content).digest();return r.sign(a,e.privateKey).toDERHex()};export{g as signWithApiKey};
