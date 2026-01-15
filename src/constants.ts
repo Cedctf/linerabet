@@ -4,6 +4,9 @@
 // Network mode: "devnet" or "testnet"
 const NETWORK_MODE = import.meta.env.VITE_NETWORK_MODE || "testnet";
 
+// Export network mode for UI display
+export const CURRENT_NETWORK = NETWORK_MODE;
+
 // Network-specific URLs based on mode
 const DEVNET_CONFIG = {
     faucetUrl: "http://localhost:8080",
@@ -23,8 +26,8 @@ export const LINERA_SERVICE_URL = config.serviceUrl;
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
 // Application IDs - replaced by docker/update-constants.mjs
-export const APP_ID = "ec465d70997e5d0bf06134efc1e5437d3b269f2e51607a7da333a14a1db728dc";
-export const BANK_CHAIN_ID = "20705b50592f13b3d5c6443111ec8b61f1f736248dc4b98408a29b2c3987d89f";
+export const APP_ID = "b979009fe6eae18c6a2db602371ea5e82d44d6981d209f8441adaec11af4aec2";
+export const BANK_CHAIN_ID = "d25a6f84f528d02b58d6699c109cbcc8022bbcca04d9ec552e1a0c681dd77f27";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { lineraAdapter } from '../lib/linera-adapter';
-import { CONTRACTS_APP_ID } from '../constants';
+import { CONTRACTS_APP_ID, CURRENT_NETWORK } from '../constants';
 import ConfirmationModal from './ConfirmationModal';
 import { useGame } from '../context/GameContext';
 
@@ -143,9 +143,9 @@ export default function ConnectWallet() {
                             <div className="p-4 space-y-3">
                                 {/* Network Status */}
                                 <div className="flex items-center gap-2 pb-2 border-b border-white/10">
-                                    <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider text-purple-400">
-                                        Connected to Conway Testnet
+                                    <div className={`w-2 h-2 rounded-full animate-pulse ${CURRENT_NETWORK === 'devnet' ? 'bg-blue-500' : 'bg-purple-500'}`} />
+                                    <span className={`text-xs font-semibold uppercase tracking-wider ${CURRENT_NETWORK === 'devnet' ? 'text-blue-400' : 'text-purple-400'}`}>
+                                        Connected to {CURRENT_NETWORK === 'devnet' ? 'Local Devnet' : 'Conway Testnet'}
                                     </span>
                                 </div>
 
