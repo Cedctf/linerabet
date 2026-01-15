@@ -50,6 +50,11 @@ export class LineraAdapter {
 
     try {
       this.connectPromise = (async () => {
+        // Defensive check: ensure dynamicWallet has required properties
+        if (!dynamicWallet || typeof dynamicWallet.address !== 'string') {
+          throw new Error("Dynamic wallet is not properly initialized - missing address");
+        }
+
         const { address } = dynamicWallet;
         console.log("🔗 Connecting with Dynamic wallet:", address);
 
@@ -79,7 +84,8 @@ export class LineraAdapter {
         // Wait for chain creation to propagate
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        const signer = await new DynamicSigner(dynamicWallet);
+        // Note: DynamicSigner constructor is synchronous, no await needed
+        const signer = new DynamicSigner(dynamicWallet);
         const client = await new (Client as any)(wallet, signer, false);
         console.log("✅ Linera wallet created successfully!");
 
