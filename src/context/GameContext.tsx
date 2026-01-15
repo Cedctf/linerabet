@@ -28,8 +28,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const provider = lineraAdapter.getProvider();
         let balance = "0";
         try {
-            if (typeof (provider.client as any).balance === 'function') {
-                balance = await (provider.client as any).balance();
+            // Correct API: get balance from the chain object, not client
+            const chain = await (provider.client as any).chain(provider.chainId);
+            if (typeof chain.balance === 'function') {
+                balance = await chain.balance();
             }
         } catch (e) {
             console.warn("Failed to fetch balance in refresh:", e);
