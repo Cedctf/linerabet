@@ -36,6 +36,7 @@ interface CurrentGame {
 
 interface GameRecord {
   gameId: number;
+  gameType: string;
   playerHand: ChainCard[];
   dealerHand: ChainCard[];
   bet: number;
@@ -121,6 +122,7 @@ export default function Blackjack() {
   const [waitingForResult, setWaitingForResult] = useState(false);
   const [lastShownGameId, setLastShownGameId] = useState<number | null>(null);
   const [showResultPopup, setShowResultPopup] = useState(false);
+  const [gameStartedThisSession, setGameStartedThisSession] = useState(false);
 
   // Derived
   const canPlay = phase === "PlayerTurn";
@@ -164,6 +166,7 @@ export default function Blackjack() {
                     }
                     gameHistory {
                         gameId
+                        gameType
                         playerHand { suit value id }
                         dealerHand { suit value id }
                         bet
@@ -183,8 +186,18 @@ export default function Blackjack() {
       setBalance(data.playerBalance || 0);
       setAllowedBets(data.allowedBets || [1, 2, 3, 4, 5]);
 
-      const newHistory = data.gameHistory || [];
+      const allHistory = data.gameHistory || [];
+      console.log("All game history:", allHistory.map((g: any) => ({ gameId: g.gameId, gameType: g.gameType })));
+      const newHistory = allHistory.filter(
+        (g: GameRecord) => g.gameType?.toUpperCase() === "BLACKJACK"
+      );
       setGameHistory(newHistory);
+
+      // On first load (lastShownGameId is null), initialize it from history
+      // to prevent showing old results when starting a new game
+      if (lastShownGameId === null && newHistory.length > 0) {
+        setLastShownGameId(newHistory[newHistory.length - 1].gameId);
+      }
 
       if (data.currentGame) {
         const game = data.currentGame;
@@ -202,7 +215,9 @@ export default function Blackjack() {
         const latestGame = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
         const isNewResult = latestGame && latestGame.gameId !== lastShownGameId;
 
-        if ((waitingForResult || waitingForSeed) && latestGame && isNewResult) {
+        // Only show history results when waitingForResult (after stand/double/bust)
+        // AND only if the game was started in this session (not old games after refresh)
+        if (gameStartedThisSession && waitingForResult && latestGame && isNewResult) {
           setLastResult(latestGame.result);
           setLastPayout(latestGame.payout);
           setLastBet(latestGame.bet);
@@ -210,7 +225,6 @@ export default function Blackjack() {
           setDealerHand(normalizeCards(latestGame.dealerHand));
           setPhase("RoundComplete");
           setWaitingForResult(false);
-          setWaitingForSeed(false);
           setLastShownGameId(latestGame.gameId);
           // Show popup after 1 second delay so player can see the cards
           setTimeout(() => {
@@ -231,7 +245,7 @@ export default function Blackjack() {
     } catch (err) {
       console.error("Failed to refresh game state:", err);
     }
-  }, [waitingForSeed, waitingForResult]);
+  }, [waitingForSeed, waitingForResult, lastShownGameId, phase, gameStartedThisSession]);
 
   useEffect(() => {
     const handleConnectionChange = () => {
@@ -271,6 +285,7 @@ export default function Blackjack() {
         const betAmount = (args as any).bet;
         mutation = `mutation { playBlackjack(bet: ${betAmount}) }`;
         setWaitingForSeed(true);
+        setGameStartedThisSession(true);
         setLastResult(null);
         setLastPayout(0);
         setShowResultPopup(false);
