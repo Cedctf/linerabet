@@ -1,1 +1,0 @@
-import{a7 as r,$ as o,a8 as s}from"./index-BEbxHcgh.js";import"./index-D-ZhVjb_.js";const g=async e=>{const i=r.getPublicKey(e.privateKey,!0),t=o(i);if(t!=e.publicKey)throw new Error(`Bad API key. Expected to get public key ${e.publicKey}, got ${t}`);const a=s().update(e.content).digest();return r.sign(a,e.privateKey).toDERHex()};export{g as signWithApiKey};
