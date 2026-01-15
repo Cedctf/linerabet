@@ -4,49 +4,21 @@ import { isEthereumWallet } from "@dynamic-labs/ethereum";
 
 /**
  * DynamicSigner - Implements the Linera Signer interface using Dynamic Labs wallet.
- * 
- * IMPORTANT: Methods are bound in constructor to ensure correct `this` context
- * when called from WASM modules (they pass methods as callbacks).
+ * Follows the official Linera + Dynamic integration pattern.
  */
 export class DynamicSigner implements Signer {
   private dynamicWallet: DynamicWallet;
 
   constructor(dynamicWallet: DynamicWallet) {
-    if (!dynamicWallet) {
-      throw new Error("DynamicSigner: dynamicWallet is required");
-    }
-    if (typeof dynamicWallet.address !== 'string') {
-      throw new Error("DynamicSigner: dynamicWallet.address must be a string");
-    }
-
     this.dynamicWallet = dynamicWallet;
-
-    // CRITICAL: Bind all methods to this instance
-    // WASM modules call these methods as callbacks, losing `this` context
-    this.address = this.address.bind(this);
-    this.containsKey = this.containsKey.bind(this);
-    this.sign = this.sign.bind(this);
-
-    console.log("✅ DynamicSigner initialized for address:", dynamicWallet.address);
   }
 
   async address(): Promise<string> {
-    const addr = this.dynamicWallet.address;
-    if (!addr) {
-      throw new Error("DynamicSigner.address: wallet address is undefined");
-    }
-    return addr;
+    return this.dynamicWallet.address;
   }
 
   async containsKey(owner: string): Promise<boolean> {
-    if (!owner || typeof owner !== 'string') {
-      console.warn("DynamicSigner.containsKey: invalid owner parameter", owner);
-      return false;
-    }
     const walletAddress = this.dynamicWallet.address;
-    if (!walletAddress) {
-      return false;
-    }
     return owner.toLowerCase() === walletAddress.toLowerCase();
   }
 
@@ -54,16 +26,12 @@ export class DynamicSigner implements Signer {
     const address: `0x${string}` = owner as `0x${string}`;
     const primaryWallet = this.dynamicWallet.address;
 
-    if (!primaryWallet) {
-      throw new Error("DynamicSigner.sign: No primary wallet address found");
-    }
-
-    if (!owner) {
-      throw new Error("DynamicSigner.sign: owner parameter is required");
+    if (!primaryWallet || !owner) {
+      throw new Error("No primary wallet found");
     }
 
     if (owner.toLowerCase() !== primaryWallet.toLowerCase()) {
-      throw new Error(`DynamicSigner.sign: Owner ${owner} does not match wallet ${primaryWallet}`);
+      throw new Error("Owner does not match primary wallet");
     }
 
     try {
@@ -75,23 +43,17 @@ export class DynamicSigner implements Signer {
       // DO NOT USE: this.dynamicWallet.signMessage(msgHex) - it would cause double-hashing
 
       // Note: First cast the wallet to an Ethereum wallet to get the wallet client
-      if (!isEthereumWallet(this.dynamicWallet)) {
-        throw new Error("DynamicSigner.sign: Wallet is not an Ethereum wallet");
-      }
-
+      if (!isEthereumWallet(this.dynamicWallet)) throw new Error();
       const walletClient = await this.dynamicWallet.getWalletClient();
       const signature = await walletClient.request({
         method: "personal_sign",
         params: [msgHex, address],
       });
 
-      if (!signature) {
-        throw new Error("DynamicSigner.sign: Failed to get signature from wallet");
-      }
-
+      if (!signature) throw new Error("Failed to sign message");
       return signature;
     } catch (error: any) {
-      console.error("DynamicSigner.sign failed:", error);
+      console.error("Failed to sign message:", error);
       throw new Error(
         `Dynamic signature request failed: ${error?.message || error}`
       );
@@ -104,3 +66,4 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
     .map((b: number) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+

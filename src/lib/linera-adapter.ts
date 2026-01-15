@@ -84,19 +84,12 @@ export class LineraAdapter {
         // Wait for chain creation to propagate
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        // Note: DynamicSigner constructor is synchronous, no await needed
-        const dynamicSigner = new DynamicSigner(dynamicWallet);
+        // Create signer using the official Linera + Dynamic pattern
+        // Note: await new DynamicSigner() as per official docs
+        const signer = await new DynamicSigner(dynamicWallet);
 
-        // CRITICAL: Wrap signer in a plain object for WASM compatibility
-        // WASM uses Reflect.get to access methods, which can fail on class instances
-        // in production builds. This plain object wrapper ensures methods are enumerable.
-        const signer = {
-          address: () => dynamicSigner.address(),
-          containsKey: (owner: string) => dynamicSigner.containsKey(owner),
-          sign: (owner: string, value: Uint8Array) => dynamicSigner.sign(owner, value),
-        };
-
-        const client = await new (Client as any)(wallet, signer, false);
+        // Client takes 2 arguments per official docs: (wallet, signer)
+        const client = await new (Client as any)(wallet, signer);
         console.log("✅ Linera wallet created successfully!");
 
         // Debug logging
@@ -136,8 +129,8 @@ export class LineraAdapter {
     if (!this.provider) throw new Error("Not connected to Linera");
     if (!appId) throw new Error("Application ID is required");
 
-    // Use client.application(appId) directly (v0.15.x API)
-    const application = await (this.provider.client as any).application(appId);
+    // Use client.frontend().application(appId) per official docs
+    const application = await (this.provider.client as any).frontend().application(appId);
 
     if (!application) throw new Error("Failed to get application");
     console.log("✅ Linera application set successfully!");
