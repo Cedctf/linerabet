@@ -8,8 +8,8 @@ export const LINERA_SERVICE_URL = "https://faucet.testnet-conway.linera.net";
 export const LINERA_RPC_URL = LINERA_FAUCET_URL;
 
 // Cross-chain casino app - Deployed to Conway Testnet
-export const APP_ID = "09f21226e3147c1b8349598c96204a559885901e66d374d8cba75789f25841a8";
-export const BANK_CHAIN_ID = "e889dc72e14b30b32a2362d19df3bd5ef3b24d9b62df13dcb3882906b4fb9166";
+export const APP_ID = "47c7bb8f9c2abc3034987b26a74e253d10d428a59b1841a51d890096b7920081";
+export const BANK_CHAIN_ID = "90ead791587f13e62e3fe5bf4e44471b5e0c9658db88a0a412d4d9329b190d81";
 
 // Legacy alias (for compatibility with existing code)
 export const CONTRACTS_APP_ID = APP_ID;
