@@ -85,7 +85,17 @@ export class LineraAdapter {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         // Note: DynamicSigner constructor is synchronous, no await needed
-        const signer = new DynamicSigner(dynamicWallet);
+        const dynamicSigner = new DynamicSigner(dynamicWallet);
+
+        // CRITICAL: Wrap signer in a plain object for WASM compatibility
+        // WASM uses Reflect.get to access methods, which can fail on class instances
+        // in production builds. This plain object wrapper ensures methods are enumerable.
+        const signer = {
+          address: () => dynamicSigner.address(),
+          containsKey: (owner: string) => dynamicSigner.containsKey(owner),
+          sign: (owner: string, value: Uint8Array) => dynamicSigner.sign(owner, value),
+        };
+
         const client = await new (Client as any)(wallet, signer, false);
         console.log("✅ Linera wallet created successfully!");
 
