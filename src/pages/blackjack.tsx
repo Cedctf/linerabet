@@ -10,6 +10,30 @@ import Header from "../components/Header";
 
 import { CONTRACTS_APP_ID } from "../constants";
 
+// ============================================================================
+// DEBUG MODE - Set to true to test UI without blockchain
+// ============================================================================
+const DEBUG_MODE_DEFAULT = false;
+
+// Mock deck for debug mode
+const MOCK_SUITS = ["clubs", "diamonds", "hearts", "spades"] as const;
+const MOCK_VALUES = [2, 3, 4, 5, 6, 7, 8, 9, 10, "jack", "queen", "king", "ace"] as const;
+
+function createMockDeck(): BlackjackCard[] {
+  const deck: BlackjackCard[] = [];
+  for (const suit of MOCK_SUITS) {
+    for (const value of MOCK_VALUES) {
+      deck.push({ suit, value: value as any, id: `${value}_of_${suit}` });
+    }
+  }
+  // Shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
 // New cross-chain phases
 type Phase = "WaitingForGame" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
 type Result =
@@ -101,8 +125,15 @@ function normalizePhase(phase: string): Phase {
 export default function Blackjack() {
   const { lineraData } = useGame();
 
-  // State from chain
-  const [balance, setBalance] = useState<number>(0);
+  // ============================================================================
+  // DEBUG MODE STATE
+  // ============================================================================
+  const [debugMode, setDebugMode] = useState(DEBUG_MODE_DEFAULT);
+  const [mockDeck, setMockDeck] = useState<BlackjackCard[]>([]);
+  const [mockDealerHoleCard, setMockDealerHoleCard] = useState<BlackjackCard | null>(null);
+
+  // State from chain (or mock in debug mode)
+  const [balance, setBalance] = useState<number>(debugMode ? 100 : 0);
   const [allowedBets, setAllowedBets] = useState<number[]>([1, 2, 3, 4, 5]);
   const [bet, setBet] = useState<number>(1);
   const [lastBet, setLastBet] = useState<number>(1);
@@ -272,9 +303,166 @@ export default function Blackjack() {
       }
     }, pollInterval);
     return () => clearInterval(syncInterval);
-  }, [busy, isConnected, refresh, waitingForSeed, waitingForResult]);
+  }, [busy, isConnected, refresh, waitingForSeed, waitingForResult, debugMode]);
+
+  // ============================================================================
+  // DEBUG MODE GAME LOGIC
+  // ============================================================================
+
+  function debugDealerPlay(currentDealerHand: BlackjackCard[], deck: BlackjackCard[], playerValue: number): { finalDealerHand: BlackjackCard[], result: Result, payout: number } {
+    const newDealerHand = [...currentDealerHand];
+    const newDeck = [...deck];
+
+    // Dealer hits until 17
+    while (calculateHandValue(newDealerHand) < 17 && newDeck.length > 0) {
+      newDealerHand.push(newDeck.pop()!);
+    }
+
+    const dealerFinalValue = calculateHandValue(newDealerHand);
+    let result: Result;
+    let payout = 0;
+
+    if (playerValue > 21) {
+      result = "PlayerBust";
+      payout = 0;
+    } else if (dealerFinalValue > 21) {
+      result = "DealerBust";
+      payout = lastBet * 2;
+    } else if (playerValue > dealerFinalValue) {
+      result = "PlayerWin";
+      payout = lastBet * 2;
+    } else if (dealerFinalValue > playerValue) {
+      result = "DealerWin";
+      payout = 0;
+    } else {
+      result = "Push";
+      payout = lastBet;
+    }
+
+    return { finalDealerHand: newDealerHand, result, payout };
+  }
+
+  function debugStartGame() {
+    const deck = createMockDeck();
+    const playerCard1 = deck.pop()!;
+    const playerCard2 = deck.pop()!;
+    const dealerUp = deck.pop()!;
+    const dealerHole = deck.pop()!;
+
+    setMockDeck(deck);
+    setMockDealerHoleCard(dealerHole);
+    setPlayerHand([playerCard1, playerCard2]);
+    setDealerHand([dealerUp]);
+    setPhase("PlayerTurn");
+    setBalance(prev => prev - bet);
+    setLastBet(bet);
+    setLastResult(null);
+    setShowResultPopup(false);
+    setCurrentGameId(Date.now());
+
+    // Check for blackjack
+    const handValue = calculateHandValue([playerCard1, playerCard2]);
+    if (handValue === 21) {
+      const fullDealerHand = [dealerUp, dealerHole];
+      const dealerValue = calculateHandValue(fullDealerHand);
+      setDealerHand(fullDealerHand);
+      setPhase("RoundComplete");
+      if (dealerValue === 21) {
+        setLastResult("Push");
+        setLastPayout(bet);
+        setBalance(prev => prev + bet);
+      } else {
+        setLastResult("PlayerBlackjack");
+        const payout = Math.floor(bet * 2.5);
+        setLastPayout(payout);
+        setBalance(prev => prev + payout);
+      }
+      setTimeout(() => setShowResultPopup(true), 500);
+    }
+  }
+
+  function debugHit() {
+    if (mockDeck.length === 0) return;
+
+    const newDeck = [...mockDeck];
+    const card = newDeck.pop()!;
+    const newHand = [...playerHand, card];
+
+    setMockDeck(newDeck);
+    setPlayerHand(newHand);
+
+    const handValue = calculateHandValue(newHand);
+    if (handValue > 21) {
+      // Bust - reveal dealer card and end
+      const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
+      setDealerHand(fullDealerHand);
+      setPhase("RoundComplete");
+      setLastResult("PlayerBust");
+      setLastPayout(0);
+      setTimeout(() => setShowResultPopup(true), 500);
+    }
+  }
+
+  function debugStand() {
+    // Reveal dealer hole card and play
+    const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
+    const { finalDealerHand, result, payout } = debugDealerPlay(fullDealerHand, mockDeck, playerValue);
+
+    setDealerHand(finalDealerHand);
+    setPhase("RoundComplete");
+    setLastResult(result);
+    setLastPayout(payout);
+    setBalance(prev => prev + payout);
+    setTimeout(() => setShowResultPopup(true), 500);
+  }
+
+  function debugDoubleDown() {
+    if (mockDeck.length === 0) return;
+    if (balance < lastBet) return;
+
+    // Double the bet
+    setBalance(prev => prev - lastBet);
+    const newBet = lastBet * 2;
+    setLastBet(newBet);
+
+    // Draw one card
+    const newDeck = [...mockDeck];
+    const card = newDeck.pop()!;
+    const newHand = [...playerHand, card];
+
+    setMockDeck(newDeck);
+    setPlayerHand(newHand);
+
+    // Then stand automatically
+    setTimeout(() => {
+      const handValue = calculateHandValue(newHand);
+      const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
+
+      if (handValue > 21) {
+        setDealerHand(fullDealerHand);
+        setPhase("RoundComplete");
+        setLastResult("PlayerBust");
+        setLastPayout(0);
+        setTimeout(() => setShowResultPopup(true), 500);
+      } else {
+        const { finalDealerHand, result, payout } = debugDealerPlay(fullDealerHand, newDeck, handValue);
+        setDealerHand(finalDealerHand);
+        setPhase("RoundComplete");
+        setLastResult(result);
+        setLastPayout(payout);
+        setBalance(prev => prev + payout);
+        setTimeout(() => setShowResultPopup(true), 500);
+      }
+    }, 300);
+  }
+
+  // ============================================================================
+  // NORMAL ACTION HANDLERS (uses blockchain or debug mode)
+  // ============================================================================
 
   const handleAction = async (action: string, args: object = {}) => {
+    if (debugMode) return; // Debug mode uses separate handlers
+
     setBusy(true);
     try {
       let mutation: string;
@@ -316,12 +504,20 @@ export default function Blackjack() {
 
   async function onStartGame() {
     if (busy) return;
+    if (debugMode) {
+      debugStartGame();
+      return;
+    }
     setLastBet(bet);
     await handleAction("playBlackjack", { bet });
   }
 
   async function onHit() {
     if (busy || phase !== "PlayerTurn") return;
+    if (debugMode) {
+      debugHit();
+      return;
+    }
     await handleAction("hit");
     setTimeout(async () => {
       await refresh();
@@ -333,6 +529,10 @@ export default function Blackjack() {
 
   async function onStand() {
     if (busy || phase !== "PlayerTurn") return;
+    if (debugMode) {
+      debugStand();
+      return;
+    }
     await handleAction("stand");
   }
 
@@ -340,6 +540,10 @@ export default function Blackjack() {
     if (busy || phase !== "PlayerTurn") return;
     if (playerHand.length !== 2) return;
     if (balance < lastBet) return;
+    if (debugMode) {
+      debugDoubleDown();
+      return;
+    }
     await handleAction("doubleDown");
   }
 
@@ -374,6 +578,36 @@ export default function Blackjack() {
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Header */}
         <Header />
+
+        {/* Debug Mode Toggle - Top Left (below header) */}
+        <div className="fixed top-20 left-4 z-50 flex flex-col gap-2">
+          <button
+            onClick={() => {
+              const newDebugMode = !debugMode;
+              setDebugMode(newDebugMode);
+              if (newDebugMode) {
+                setBalance(100);
+                setPhase("WaitingForGame");
+                setPlayerHand([]);
+                setDealerHand([]);
+                setIsConnected(true);
+              }
+            }}
+            className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${debugMode
+              ? "bg-red-600 text-white border-2 border-red-400 shadow-lg shadow-red-500/50"
+              : "bg-gray-800/80 text-gray-400 border border-gray-600 hover:bg-gray-700"
+              }`}
+          >
+            🛠️ {debugMode ? "DEBUG ON" : "Debug Off"}
+          </button>
+
+          {/* Balance Display */}
+          <div className={`px-3 py-2 rounded-lg text-center font-bold ${debugMode ? "bg-red-900/80 border border-red-500" : "bg-black/60 border border-white/20"
+            }`}>
+            <div className="text-xs text-white/60">Balance</div>
+            <div className="text-xl text-yellow-400">{balance} 🪙</div>
+          </div>
+        </div>
 
         {/* History Button - Bottom Left Corner (always visible) */}
         <button
@@ -453,13 +687,13 @@ export default function Blackjack() {
           {(phase === "PlayerTurn" || phase === "DealerTurn" || phase === "RoundComplete") && (
             <div className="flex-1 flex flex-col justify-between items-center py-4 relative">
               {/* Dealer Hand - Top Area */}
-              <div className="w-full max-w-md flex flex-col items-center mt-[115px]">
+              <div className="w-full max-w-lg flex flex-col items-center mt-[145px]">
                 <div className="text-lg font-semibold text-white/80 mb-2 drop-shadow-lg">
-                  Dealer ({phase === "PlayerTurn" ? "?" : dealerValue})
+                  Dealer ({dealerValue})
                 </div>
-                <div className="flex gap-2 justify-center min-h-[140px] items-center">
+                <div className="flex justify-center min-h-[140px] items-center px-4">
                   {dealerHand.map((card, idx) => (
-                    <div key={idx} className="transform hover:scale-105 transition-transform -ml-6 first:ml-0">
+                    <div key={idx} className="transform hover:scale-105 transition-transform" style={{ marginLeft: idx > 0 ? '-20px' : '0' }}>
                       <CardComp
                         suit={card.suit as any}
                         value={card.value as any}
@@ -506,16 +740,16 @@ export default function Blackjack() {
               )}
 
               {/* Player Hand - Bottom Area */}
-              <div className="w-full max-w-md flex flex-col items-center mb-[-15px]">
-                <div className="flex gap-2 justify-center min-h-[140px] items-center">
+              <div className="w-full max-w-lg flex flex-col items-center mb-[-15px]">
+                <div className="text-lg font-semibold text-white/80 mb-2 drop-shadow-lg">
+                  You ({playerValue})
+                </div>
+                <div className="flex justify-center min-h-[140px] items-center px-4">
                   {playerHand.map((card, idx) => (
-                    <div key={idx} className="transform hover:scale-105 transition-transform -ml-6 first:ml-0">
+                    <div key={idx} className="transform hover:scale-105 transition-transform" style={{ marginLeft: idx > 0 ? '-20px' : '0' }}>
                       <CardComp suit={card.suit as any} value={card.value as any} width={90} height={126} />
                     </div>
                   ))}
-                </div>
-                <div className="text-lg font-semibold text-white/80 mt-2 drop-shadow-lg">
-                  You ({playerValue})
                 </div>
               </div>
 

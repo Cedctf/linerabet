@@ -45,13 +45,18 @@ export const calculateHandValue = (cards: BlackjackCard[]): number => {
   let aces = 0;
 
   cards.forEach(card => {
-    if (card.value === 'ace') {
+    const val = card.value;
+    if (val === 'ace') {
       aces += 1;
       sum += 11;
-    } else if (['jack', 'queen', 'king'].includes(card.value as string)) {
+    } else if (val === 'jack' || val === 'queen' || val === 'king') {
       sum += 10;
+    } else if (typeof val === 'number') {
+      sum += val;
     } else {
-      sum += card.value as number;
+      // Handle string numbers like "8", "10"
+      const numVal = parseInt(val, 10);
+      sum += isNaN(numVal) ? 0 : numVal;
     }
   });
 
