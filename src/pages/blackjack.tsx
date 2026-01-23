@@ -154,6 +154,7 @@ export default function Blackjack() {
   const [lastShownGameId, setLastShownGameId] = useState<number | null>(null);
   const [showResultPopup, setShowResultPopup] = useState(false);
   const [gameStartedThisSession, setGameStartedThisSession] = useState(false);
+  const [showControlsSidebar, setShowControlsSidebar] = useState(true);
 
   // Derived
   const canPlay = phase === "PlayerTurn";
@@ -753,57 +754,88 @@ export default function Blackjack() {
                 </div>
               </div>
 
-              {/* Controls - Bottom Right Corner */}
+              {/* Collapsible Controls Sidebar - Right Side */}
               {phase === "PlayerTurn" && (
-                <div className="fixed bottom-4 right-4 flex flex-row gap-4 z-30">
+                <div
+                  className={`fixed bottom-4 right-0 z-30 flex items-center transition-all duration-300 ${showControlsSidebar ? 'translate-x-0' : 'translate-x-full'
+                    }`}
+                >
+                  {/* Toggle Button - Protrudes to the left of the sliding container */}
                   <button
-                    onClick={onHit}
-                    disabled={busy}
-                    className="group relative hover:scale-110 transition-transform disabled:opacity-50"
-                    style={{ width: '8vw', height: '18vh' }}
+                    onClick={() => setShowControlsSidebar(!showControlsSidebar)}
+                    className="absolute left-0 -translate-x-full bg-gray-800/90 hover:bg-gray-700 border-2 border-gray-600 rounded-l-lg h-20 w-8 flex items-center justify-center shrink-0"
                   >
-                    <img
-                      src="/buttons/hit.png"
-                      alt="Hit"
-                      className="w-full h-full object-contain group-hover:hidden"
-                    />
-                    <img
-                      src="/animations/hit.gif"
-                      alt="Hit"
-                      className="w-full h-full object-contain hidden group-hover:block"
-                    />
+                    <span className="text-white text-2xl font-bold">
+                      {showControlsSidebar ? '›' : '‹'}
+                    </span>
                   </button>
-                  <button
-                    onClick={onStand}
-                    disabled={busy}
-                    className="group relative hover:scale-110 transition-transform disabled:opacity-50"
-                    style={{ width: '8vw', height: '18vh' }}
-                  >
-                    <img
-                      src="/buttons/stand.png"
-                      alt="Stand"
-                      className="w-full h-full object-contain group-hover:hidden"
-                    />
-                    <img
-                      src="/animations/stand.gif"
-                      alt="Stand"
-                      className="w-full h-full object-contain hidden group-hover:block"
-                    />
-                  </button>
-                  {/* Double Button - Only shown when player has 2 cards and enough balance */}
-                  {playerHand.length === 2 && balance >= lastBet && (
-                    <button
-                      onClick={onDoubleDown}
-                      disabled={busy}
-                      className="relative hover:scale-110 transition-transform disabled:opacity-50 bg-gradient-to-b from-purple-500 to-purple-700 border-4 border-purple-300 rounded-xl shadow-lg flex items-center justify-center"
-                      style={{ width: '8vw', height: '18vh', minWidth: '80px' }}
-                    >
-                      <div className="flex flex-col items-center">
-                        <span className="text-white font-bold text-lg drop-shadow-lg">DOUBLE</span>
-                        <span className="text-yellow-300 font-semibold text-sm">x2</span>
-                      </div>
-                    </button>
-                  )}
+
+                  {/* Sidebar Panel */}
+                  <div className="bg-gray-900/95 border-l-2 border-t-2 border-b-2 border-gray-600 rounded-l-xl p-4 shadow-2xl">
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Top Row: Split, Double */}
+                      <button
+                        onClick={() => {/* Split logic - to be implemented */ }}
+                        disabled={busy || playerHand.length !== 2 || !(playerHand.length === 2 && playerHand[0]?.value === playerHand[1]?.value) || balance < lastBet}
+                        className="relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-b from-blue-500 to-blue-700 border-4 border-blue-300 rounded-xl shadow-lg flex items-center justify-center"
+                        style={{ width: '8vw', height: '18vh', minWidth: '80px' }}
+                      >
+                        <div className="flex flex-col items-center">
+                          <span className="text-white font-bold text-lg drop-shadow-lg">SPLIT</span>
+                          <span className="text-yellow-300 font-semibold text-sm">✂️</span>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={onDoubleDown}
+                        disabled={busy || playerHand.length !== 2 || balance < lastBet}
+                        className="relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-b from-purple-500 to-purple-700 border-4 border-purple-300 rounded-xl shadow-lg flex items-center justify-center"
+                        style={{ width: '8vw', height: '18vh', minWidth: '80px' }}
+                      >
+                        <div className="flex flex-col items-center">
+                          <span className="text-white font-bold text-lg drop-shadow-lg">DOUBLE</span>
+                          <span className="text-yellow-300 font-semibold text-sm">x2</span>
+                        </div>
+                      </button>
+
+                      {/* Bottom Row: Hit, Stand */}
+                      <button
+                        onClick={onHit}
+                        disabled={busy}
+                        className="group relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ width: '8vw', height: '18vh' }}
+                      >
+                        <img
+                          src="/buttons/hit.png"
+                          alt="Hit"
+                          className="w-full h-full object-contain group-hover:hidden"
+                        />
+                        <img
+                          src="/animations/hit.gif"
+                          alt="Hit"
+                          className="w-full h-full object-contain hidden group-hover:block"
+                        />
+                      </button>
+
+                      <button
+                        onClick={onStand}
+                        disabled={busy}
+                        className="group relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ width: '8vw', height: '18vh' }}
+                      >
+                        <img
+                          src="/buttons/stand.png"
+                          alt="Stand"
+                          className="w-full h-full object-contain group-hover:hidden"
+                        />
+                        <img
+                          src="/animations/stand.gif"
+                          alt="Stand"
+                          className="w-full h-full object-contain hidden group-hover:block"
+                        />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
