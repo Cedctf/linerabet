@@ -4,6 +4,10 @@ import CardComp from "../components/Card";
 import {
   calculateHandValue,
   renderHandValue,
+  createDeck,
+  shuffleArray,
+  canSplit,
+  canDoubleDown,
   type BlackjackCard,
 } from "../lib/blackjack-utils";
 import { lineraAdapter } from "@/lib/linera-adapter";
@@ -101,7 +105,11 @@ function normalizePhase(phase: string): Phase {
 }
 
 export default function Blackjack() {
-  const { lineraData } = useGame();
+  const { lineraData, isDebugMode, debugBalance, setDebugBalance } = useGame();
+
+  // State for Debug Mode
+  const [debugDeck, setDebugDeck] = useState<BlackjackCard[]>([]);
+  const [debugGameHistory, setDebugGameHistory] = useState<GameRecord[]>([]);
 
   // State from chain
   const [balance, setBalance] = useState<number>(0);
@@ -137,6 +145,8 @@ export default function Blackjack() {
   const canPlay = phase === "PlayerTurn";
   const isSplitMode = allHands.length > 1;
   const currentHand = allHands[activeHandIndex] || playerHand;
+  const effectiveBalance = isDebugMode ? debugBalance : balance;
+  const effectiveHistory = isDebugMode ? debugGameHistory : gameHistory;
 
   const playerValue = useMemo(() => calculateHandValue(playerHand), [playerHand]);
   // Calculate values for all hands
@@ -346,7 +356,7 @@ export default function Blackjack() {
       } else if (action === "split") {
         mutation = `mutation { split }`;
       } else {
-        throw new Error(`Unknown action: ${action}`);
+        mutation = `mutation { ${action} }`;
       }
 
       await lineraAdapter.mutate(mutation);
@@ -362,14 +372,142 @@ export default function Blackjack() {
     }
   };
 
+  // --- Debug Mode Helpers ---
+  const drawCard = (deck: BlackjackCard[]) => {
+    const newDeck = [...deck];
+    const card = newDeck.pop();
+    if (!card) return { card: null, deck: [] };
+    return { card, deck: newDeck };
+  };
+
+  const resolveDebugGame = (finalHands: BlackjackCard[][], finalDealer: BlackjackCard[], currentBet: number) => {
+    const dValue = calculateHandValue(finalDealer);
+    const dBust = dValue > 21;
+    const dBlackjack = dValue === 21 && finalDealer.length === 2;
+
+    let totalPayout = 0;
+    const lastResArr: Result[] = [];
+
+    finalHands.forEach(hand => {
+      const pValue = calculateHandValue(hand);
+      const pBust = pValue > 21;
+      const pBlackjack = pValue === 21 && hand.length === 2;
+
+      let res: Result = null;
+      let payout = 0;
+
+      if (pBust) {
+        res = "PlayerBust";
+        payout = 0;
+      } else if (pBlackjack && !dBlackjack) {
+        res = "PlayerBlackjack";
+        payout = currentBet * 2.5;
+      } else if (dBust) {
+        res = "DealerBust";
+        payout = currentBet * 2;
+      } else if (pValue > dValue) {
+        res = "PlayerWin";
+        payout = currentBet * 2;
+      } else if (pValue < dValue) {
+        res = "DealerWin";
+        payout = 0;
+      } else {
+        res = "Push";
+        payout = currentBet;
+      }
+      totalPayout += payout;
+      lastResArr.push(res);
+    });
+
+    setLastResult(lastResArr[0]); // For popup compatibility
+    setLastPayout(totalPayout);
+    setDebugBalance(debugBalance - (allHands.length || 1) * currentBet + totalPayout);
+
+    const record: GameRecord = {
+      gameId: Date.now(),
+      gameType: "BLACKJACK",
+      playerHands: finalHands.map(h => h.map(c => ({ suit: c.suit, value: c.value.toString(), id: c.id }))),
+      dealerHand: finalDealer.map(c => ({ suit: c.suit, value: c.value.toString(), id: c.id })),
+      bet: currentBet,
+      result: lastResArr[0],
+      payout: totalPayout,
+      timestamp: Date.now()
+    };
+    setDebugGameHistory(prev => [...prev, record]);
+
+    setPhase("RoundComplete");
+    setWaitingForResult(false);
+    setTimeout(() => setShowResultPopup(true), 1500);
+  };
+
   async function onStartGame() {
     if (busy) return;
+    if (isDebugMode) {
+      if (debugBalance < bet) {
+        alert("Insufficient debug balance!");
+        return;
+      }
+      setBusy(true);
+      setWaitingForSeed(true);
+      setGameStartedThisSession(true);
+
+      setTimeout(() => {
+        const deck = shuffleArray(createDeck());
+        const p1 = deck.pop()!;
+        const d1 = deck.pop()!;
+        const p2 = deck.pop()!;
+        const d2 = deck.pop()!;
+
+        setPlayerHand([p1, p2]);
+        setAllHands([[p1, p2]]);
+        setDealerHand([d1, d2]);
+        setDebugDeck(deck);
+        setPhase("PlayerTurn");
+        setWaitingForSeed(false);
+        setBusy(false);
+        setActiveHandIndex(0);
+        setHandResults(['playing']);
+
+        // Check for immediate blackjacks
+        const pVal = calculateHandValue([p1, p2]);
+        if (pVal === 21) {
+          setPhase("DealerTurn");
+          resolveDebugGame([[p1, p2]], [d1, d2], bet);
+        }
+      }, 800);
+      return;
+    }
     setLastBet(bet);
     await handleAction("playBlackjack", { bet });
   }
 
   async function onHit() {
     if (busy || phase !== "PlayerTurn") return;
+    if (isDebugMode) {
+      const { card, deck } = drawCard(debugDeck);
+      if (!card) return;
+
+      const newHand = [...currentHand, card];
+      const newAllHands = [...allHands];
+      newAllHands[activeHandIndex] = newHand;
+
+      setAllHands(newAllHands);
+      if (!isSplitMode) setPlayerHand(newHand);
+      setDebugDeck(deck);
+
+      const val = calculateHandValue(newHand);
+      if (val >= 21) {
+        if (isSplitMode && activeHandIndex < allHands.length - 1) {
+          const newResults = [...handResults];
+          newResults[activeHandIndex] = val > 21 ? 'bust' : 'stand';
+          setHandResults(newResults);
+          setActiveHandIndex(activeHandIndex + 1);
+        } else {
+          onStand();
+        }
+      }
+      return;
+    }
     await handleAction("hit");
     setTimeout(async () => {
       await refresh();
@@ -381,16 +519,97 @@ export default function Blackjack() {
 
   async function onStand() {
     if (busy || phase !== "PlayerTurn") return;
+    if (isDebugMode) {
+      if (isSplitMode && activeHandIndex < allHands.length - 1) {
+        const newResults = [...handResults];
+        newResults[activeHandIndex] = 'stand';
+        setHandResults(newResults);
+        setActiveHandIndex(activeHandIndex + 1);
+        return;
+      }
+
+      setPhase("DealerTurn");
+      setWaitingForResult(true);
+
+      setTimeout(() => {
+        let currentDealer = [...dealerHand];
+        let currentDeck = [...debugDeck];
+
+        while (calculateHandValue(currentDealer) < 17) {
+          const card = currentDeck.pop();
+          if (!card) break;
+          currentDealer.push(card);
+        }
+
+        setDealerHand(currentDealer);
+        resolveDebugGame(allHands, currentDealer, bet);
+      }, 1000);
+      return;
+    }
     await handleAction("stand");
   }
 
   async function onSplit() {
     if (busy || phase !== "PlayerTurn") return;
+    if (isDebugMode) {
+      const hand = allHands[activeHandIndex];
+      if (!canSplit(hand)) return;
+      if (debugBalance < (allHands.length + 1) * bet) {
+        alert("Insufficient balance for split!");
+        return;
+      }
+
+      let currentDeck = [...debugDeck];
+      const card1 = currentDeck.pop()!;
+      const card2 = currentDeck.pop()!;
+
+      const newHand1 = [hand[0], card1];
+      const newHand2 = [hand[1], card2];
+
+      const newAllHands = [...allHands];
+      newAllHands.splice(activeHandIndex, 1, newHand1, newHand2);
+
+      setAllHands(newAllHands);
+      setDebugDeck(currentDeck);
+      setHandResults(newArray(newAllHands.length).fill('playing') as ('playing' | 'stand' | 'bust' | 'blackjack')[]);
+      return;
+    }
     await handleAction("split");
   }
 
+  function newArray(len: number): any[] { return Array.from({ length: len }); }
+
   async function onDoubleDown() {
     if (busy || phase !== "PlayerTurn") return;
+    if (isDebugMode) {
+      const hand = allHands[activeHandIndex];
+      if (!canDoubleDown(hand)) return;
+      if (debugBalance < (allHands.length + 1) * bet) {
+        alert("Insufficient balance for double!");
+        return;
+      }
+
+      const { card, deck } = drawCard(debugDeck);
+      if (!card) return;
+
+      const newHand = [...hand, card];
+      const newAllHands = [...allHands];
+      newAllHands[activeHandIndex] = newHand;
+
+      setAllHands(newAllHands);
+      setDebugDeck(deck);
+
+      // After double, we always stand
+      if (isSplitMode && activeHandIndex < allHands.length - 1) {
+        const newResults = [...handResults];
+        newResults[activeHandIndex] = calculateHandValue(newHand) > 21 ? 'bust' : 'stand';
+        setHandResults(newResults);
+        setActiveHandIndex(activeHandIndex + 1);
+      } else {
+        onStand();
+      }
+      return;
+    }
     // Check the correct hand based on split mode
     const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
     if (!handToCheck || handToCheck.length !== 2) return;
@@ -477,7 +696,7 @@ export default function Blackjack() {
                 </div>
                 <button
                   onClick={onStartGame}
-                  disabled={busy || balance < bet}
+                  disabled={busy || effectiveBalance < bet}
                   className="w-full mt-2 hover:scale-105 transition-all flex justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <img
@@ -652,7 +871,7 @@ export default function Blackjack() {
                       {/* Top Row: Split, Double */}
                       <button
                         onClick={onSplit}
-                        disabled={busy || balance < lastBet || (() => {
+                        disabled={busy || effectiveBalance < bet || (() => {
                           // Check if current hand can be split
                           const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
                           if (!handToCheck || handToCheck.length !== 2) return true;
@@ -669,7 +888,7 @@ export default function Blackjack() {
 
                       <button
                         onClick={onDoubleDown}
-                        disabled={busy || balance < lastBet || (() => {
+                        disabled={busy || effectiveBalance < bet || (() => {
                           const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
                           return !handToCheck || handToCheck.length !== 2;
                         })()}
@@ -733,7 +952,7 @@ export default function Blackjack() {
                   <h2 className="text-3xl font-bold text-green-400">Game History</h2>
                   <button onClick={() => setShowHistory(false)} className="text-white text-3xl">✕</button>
                 </div>
-                {gameHistory.slice().reverse().map((game, i) => {
+                {effectiveHistory.slice().reverse().map((game, i) => {
                   const normalizedResult = normalizeResult(game.result);
                   const gameIsWin = normalizedResult === "PLAYER_BLACKJACK" || normalizedResult === "PLAYER_WIN" || normalizedResult === "DEALER_BUST";
                   const gameNet = game.payout - game.bet;
