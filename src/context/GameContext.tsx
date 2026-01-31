@@ -11,6 +11,11 @@ interface GameContextType {
     setPendingBet: (amount: number) => void;
     balanceLocked: boolean;
     setBalanceLocked: (locked: boolean) => void;
+    // Debug Mode
+    isDebugMode: boolean;
+    setIsDebugMode: (val: boolean) => void;
+    debugBalance: number;
+    setDebugBalance: (val: number) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -21,6 +26,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false);
     const [pendingBet, setPendingBet] = useState(0);
     const [balanceLocked, setBalanceLocked] = useState(false);
+
+    // Debug Mode state
+    const [isDebugMode, setIsDebugModeState] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('linera_debug_mode') === 'true';
+        }
+        return false;
+    });
+
+    const [debugBalance, setDebugBalanceState] = useState<number>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('linera_debug_balance');
+            return saved ? parseInt(saved, 10) : 1000;
+        }
+        return 1000;
+    });
+
+    const setIsDebugMode = useCallback((val: boolean) => {
+        setIsDebugModeState(val);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('linera_debug_mode', val.toString());
+        }
+    }, []);
+
+    const setDebugBalance = useCallback((val: number) => {
+        setDebugBalanceState(val);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('linera_debug_balance', val.toString());
+        }
+    }, []);
 
     const refreshData = useCallback(async () => {
         if (!primaryWallet || !lineraAdapter.isChainConnected()) return;
@@ -101,7 +136,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, [lineraData, refreshData]);
 
     return (
-        <GameContext.Provider value={{ lineraData, isConnecting, refreshData, pendingBet, setPendingBet, balanceLocked, setBalanceLocked }}>
+        <GameContext.Provider value={{
+            lineraData,
+            isConnecting,
+            refreshData,
+            pendingBet,
+            setPendingBet,
+            balanceLocked,
+            setBalanceLocked,
+            isDebugMode,
+            setIsDebugMode,
+            debugBalance,
+            setDebugBalance
+        }}>
             {children}
         </GameContext.Provider>
     );

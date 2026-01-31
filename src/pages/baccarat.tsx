@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
+import { playBaccaratRound } from "../lib/baccarat-utils";
 import CardComp from "../components/Card";
 import Header from "../components/Header";
 
@@ -54,9 +55,11 @@ const calculateBaccaratScore = (hand: any[]) => {
 };
 
 export default function BaccaratPage() {
-    const { lineraData, refreshData } = useGame();
-    const balance = lineraData?.gameBalance || 0;
+    const { lineraData, refreshData, isDebugMode, debugBalance, setDebugBalance } = useGame();
+    const balance = isDebugMode ? debugBalance : (lineraData?.gameBalance || 0);
     const isConnected = !!lineraData;
+
+    const [debugHistory, setDebugHistory] = useState<BaccaratRecord[]>([]);
 
     const [betAmount, setBetAmount] = useState<number>(1);
     const [betType, setBetType] = useState<BaccaratBetType>("PLAYER");
@@ -147,18 +150,20 @@ export default function BaccaratPage() {
         }
     }, [phase, lastSeenGameId, refreshData]);
 
+    const effectiveHistory = isDebugMode ? debugHistory : history;
+
     useEffect(() => {
-        if (isConnected) {
+        if (isConnected && !isDebugMode) {
             refresh();
         }
 
-        // Polling when playing
+        // Polling when playing (only if not in debug mode)
         let interval: NodeJS.Timeout;
-        if (phase === "Playing" || busy) {
+        if ((phase === "Playing" || busy) && !isDebugMode) {
             interval = setInterval(refresh, 1000);
         }
         return () => clearInterval(interval);
-    }, [isConnected, refresh, phase, busy]);
+    }, [isConnected, refresh, phase, busy, isDebugMode]);
 
     const placeBet = async () => {
         if (busy) return;
@@ -167,14 +172,45 @@ export default function BaccaratPage() {
             return;
         }
 
-        // Capture current latest game ID before betting
-        const currentLatestId = history.length > 0 ? (history[0] as any).gameId : -1;
-        setLastSeenGameId(currentLatestId);
-
         setBusy(true);
         setPhase("Playing");
         setLastOutcome(null);
         setShowPopup(false);
+
+        if (isDebugMode) {
+            // Simulated Baccarat
+            setTimeout(() => {
+                const res = playBaccaratRound(betAmount, betType);
+                const record: BaccaratRecord = {
+                    gameId: Date.now(),
+                    playerHand: res.playerHand.map(c => ({ suit: c.suit, value: c.value.toString() })),
+                    bankerHand: res.bankerHand.map(c => ({ suit: c.suit, value: c.value.toString() })),
+                    bet: betAmount,
+                    betType: betType,
+                    winner: res.winner,
+                    payout: res.payoutMultiplier > 0 ? res.netProfit + betAmount : (res.pushed ? betAmount : 0),
+                    timestamp: Date.now(),
+                    playerScore: res.playerValue,
+                    bankerScore: res.bankerValue,
+                    isNatural: res.isNatural
+                };
+
+                setLastOutcome(record);
+                setDebugHistory(prev => [record, ...prev]);
+                setDebugBalance(debugBalance + res.netProfit);
+                setPhase("RoundComplete");
+                setBusy(false);
+
+                setTimeout(() => {
+                    setShowPopup(true);
+                }, 1000);
+            }, 1000);
+            return;
+        }
+
+        // Capture current latest game ID before betting
+        const currentLatestId = history.length > 0 ? (history[0] as any).gameId : -1;
+        setLastSeenGameId(currentLatestId);
 
         try {
             const mutation = `mutation { playBaccarat(amount: ${betAmount}, betType: ${betType}) }`;
@@ -357,7 +393,7 @@ export default function BaccaratPage() {
                             </button>
                         </div>
                         <div className="space-y-2">
-                            {history.map((game, i) => (
+                            {effectiveHistory.map((game, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/10">
                                     <div className="flex items-center gap-4">
                                         <span className="text-gray-400 text-sm">#{history.length - i}</span>
