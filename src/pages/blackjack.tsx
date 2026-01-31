@@ -11,31 +11,7 @@ import Header from "../components/Header";
 
 import { CONTRACTS_APP_ID } from "../constants";
 
-// ============================================================================
-// DEBUG MODE - Set to true to test UI without blockchain
-// ============================================================================
-const DEBUG_MODE_DEFAULT = false;
-
-// Mock deck for debug mode
-const MOCK_SUITS = ["clubs", "diamonds", "hearts", "spades"] as const;
-const MOCK_VALUES = [2, 3, 4, 5, 6, 7, 8, 9, 10, "jack", "queen", "king", "ace"] as const;
-
-function createMockDeck(): BlackjackCard[] {
-  const deck: BlackjackCard[] = [];
-  for (const suit of MOCK_SUITS) {
-    for (const value of MOCK_VALUES) {
-      deck.push({ suit, value: value as any, id: `${value}_of_${suit}` });
-    }
-  }
-  // Shuffle
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  return deck;
-}
-
-// New cross-chain phases
+// Cross-chain phases
 type Phase = "WaitingForGame" | "PlayerTurn" | "DealerTurn" | "RoundComplete";
 type Result =
   | null
@@ -53,16 +29,17 @@ interface CurrentGame {
   seed: number;
   bet: number;
   phase: string;
-  playerHand: ChainCard[];
+  playerHands: ChainCard[][];  // Now a 2D array for split hands
   dealerHand: ChainCard[];
-  playerValue: number;
+  playerValues: number[];  // Array of values for each hand
   dealerValue: number;
+  activeHandIndex: number;
 }
 
 interface GameRecord {
   gameId: number;
   gameType: string;
-  playerHand: ChainCard[];
+  playerHands: ChainCard[][];  // Now a 2D array
   dealerHand: ChainCard[];
   bet: number;
   result: Result;
@@ -126,15 +103,8 @@ function normalizePhase(phase: string): Phase {
 export default function Blackjack() {
   const { lineraData } = useGame();
 
-  // ============================================================================
-  // DEBUG MODE STATE
-  // ============================================================================
-  const [debugMode, setDebugMode] = useState(DEBUG_MODE_DEFAULT);
-  const [mockDeck, setMockDeck] = useState<BlackjackCard[]>([]);
-  const [mockDealerHoleCard, setMockDealerHoleCard] = useState<BlackjackCard | null>(null);
-
-  // State from chain (or mock in debug mode)
-  const [balance, setBalance] = useState<number>(debugMode ? 100 : 0);
+  // State from chain
+  const [balance, setBalance] = useState<number>(0);
   const [allowedBets, setAllowedBets] = useState<number[]>([1, 2, 3, 4, 5]);
   const [bet, setBet] = useState<number>(1);
   const [lastBet, setLastBet] = useState<number>(1);
@@ -202,15 +172,16 @@ export default function Blackjack() {
                         seed
                         bet
                         phase
-                        playerHand { suit value id }
+                        playerHands { suit value id }
                         dealerHand { suit value id }
-                        playerValue
+                        playerValues
                         dealerValue
+                        activeHandIndex
                     }
                     gameHistory {
                         gameId
                         gameType
-                        playerHand { suit value id }
+                        playerHands { suit value id }
                         dealerHand { suit value id }
                         bet
                         result
@@ -247,7 +218,27 @@ export default function Blackjack() {
         setCurrentGameId(game.gameId);
         const gamePhase = normalizePhase(game.phase);
         setPhase(gamePhase);
-        setPlayerHand(normalizeCards(game.playerHand));
+        // Handle multi-hand: playerHands is now Vec<Vec<Card>>
+        const hands = game.playerHands || [];
+        if (hands.length > 0) {
+          // Set allHands for split mode, playerHand to first hand for compatibility
+          const normalizedHands = hands.map((h: ChainCard[]) => normalizeCards(h));
+          setAllHands(normalizedHands);
+          setPlayerHand(normalizedHands[0] || []);
+          setActiveHandIndex(game.activeHandIndex || 0);
+          // Initialize handResults based on hand values and active index
+          const newHandResults = normalizedHands.map((hand: BlackjackCard[], idx: number) => {
+            const handValue = calculateHandValue(hand);
+            if (handValue > 21) return 'bust' as const;
+            if (idx < (game.activeHandIndex || 0)) return 'stand' as const;
+            return 'playing' as const;
+          });
+          setHandResults(newHandResults);
+        } else {
+          setPlayerHand([]);
+          setAllHands([]);
+          setHandResults([]);
+        }
         setDealerHand(normalizeCards(game.dealerHand));
         setWaitingForSeed(false);
 
@@ -264,15 +255,23 @@ export default function Blackjack() {
           setLastResult(latestGame.result);
           setLastPayout(latestGame.payout);
           setLastBet(latestGame.bet);
-          setPlayerHand(normalizeCards(latestGame.playerHand));
+          // Handle multi-hand in history
+          const hands = latestGame.playerHands || [];
+          if (hands.length > 0) {
+            const normalizedHands = hands.map((h: ChainCard[]) => normalizeCards(h));
+            setAllHands(normalizedHands);
+            setPlayerHand(normalizedHands[0] || []);
+          } else {
+            setPlayerHand([]);
+          }
           setDealerHand(normalizeCards(latestGame.dealerHand));
           setPhase("RoundComplete");
           setWaitingForResult(false);
           setLastShownGameId(latestGame.gameId);
-          // Show popup after 1 second delay so player can see the cards
+          // Show popup after 3 second delay so player can see the cards
           setTimeout(() => {
             setShowResultPopup(true);
-          }, 1000);
+          }, 3000);
         } else if (!waitingForSeed && !waitingForResult && phase !== "RoundComplete") {
           setPhase("WaitingForGame");
           setPlayerHand([]);
@@ -315,466 +314,13 @@ export default function Blackjack() {
       }
     }, pollInterval);
     return () => clearInterval(syncInterval);
-  }, [busy, isConnected, refresh, waitingForSeed, waitingForResult, debugMode]);
+  }, [busy, isConnected, refresh, waitingForSeed, waitingForResult]);
 
   // ============================================================================
-  // DEBUG MODE GAME LOGIC
-  // ============================================================================
-
-  function debugDealerPlay(currentDealerHand: BlackjackCard[], deck: BlackjackCard[], playerValue: number): { finalDealerHand: BlackjackCard[], result: Result, payout: number } {
-    const newDealerHand = [...currentDealerHand];
-    const newDeck = [...deck];
-
-    // Dealer hits until 17
-    while (calculateHandValue(newDealerHand) < 17 && newDeck.length > 0) {
-      newDealerHand.push(newDeck.pop()!);
-    }
-
-    const dealerFinalValue = calculateHandValue(newDealerHand);
-    let result: Result;
-    let payout = 0;
-
-    if (playerValue > 21) {
-      result = "PlayerBust";
-      payout = 0;
-    } else if (dealerFinalValue > 21) {
-      result = "DealerBust";
-      payout = lastBet * 2;
-    } else if (playerValue > dealerFinalValue) {
-      result = "PlayerWin";
-      payout = lastBet * 2;
-    } else if (dealerFinalValue > playerValue) {
-      result = "DealerWin";
-      payout = 0;
-    } else {
-      result = "Push";
-      payout = lastBet;
-    }
-
-    return { finalDealerHand: newDealerHand, result, payout };
-  }
-
-  function debugStartGame() {
-    const deck = createMockDeck();
-    const playerCard1 = deck.pop()!;
-    const playerCard2 = deck.pop()!;
-    const dealerUp = deck.pop()!;
-    const dealerHole = deck.pop()!;
-
-    setMockDeck(deck);
-    setMockDealerHoleCard(dealerHole);
-    setPlayerHand([playerCard1, playerCard2]);
-    setDealerHand([dealerUp]);
-    setPhase("PlayerTurn");
-    setBalance(prev => prev - bet);
-    setLastBet(bet);
-    setLastResult(null);
-    setShowResultPopup(false);
-    setCurrentGameId(Date.now());
-    // Reset multi-hand split state
-    setAllHands([]);
-    setActiveHandIndex(0);
-    setHandResults([]);
-
-    // Check for blackjack
-    const handValue = calculateHandValue([playerCard1, playerCard2]);
-    if (handValue === 21) {
-      const fullDealerHand = [dealerUp, dealerHole];
-      const dealerValue = calculateHandValue(fullDealerHand);
-      setDealerHand(fullDealerHand);
-      setPhase("RoundComplete");
-      if (dealerValue === 21) {
-        setLastResult("Push");
-        setLastPayout(bet);
-        setBalance(prev => prev + bet);
-      } else {
-        setLastResult("PlayerBlackjack");
-        const payout = Math.floor(bet * 2.5);
-        setLastPayout(payout);
-        setBalance(prev => prev + payout);
-      }
-      setTimeout(() => setShowResultPopup(true), 1000);
-    }
-  }
-
-  // Debug function to start game with a splittable hand (two cards of same value)
-  function debugStartGameWithSplit() {
-    const deck = createMockDeck();
-
-    // Find two cards with the same value for a splittable hand
-    let playerCard1: BlackjackCard | null = null;
-    let playerCard2: BlackjackCard | null = null;
-
-    // Pick a random value to split on
-    const splitValues = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'jack', 'queen', 'king', 'ace'];
-    const targetValue = splitValues[Math.floor(Math.random() * splitValues.length)];
-
-    // Find two cards with the target value
-    const matchingCards = deck.filter(c => c.value === targetValue);
-    if (matchingCards.length >= 2) {
-      playerCard1 = matchingCards[0];
-      playerCard2 = matchingCards[1];
-      // Remove them from deck
-      const idx1 = deck.indexOf(playerCard1);
-      deck.splice(idx1, 1);
-      const idx2 = deck.indexOf(playerCard2);
-      deck.splice(idx2, 1);
-    } else {
-      // Fallback: just use first two cards
-      playerCard1 = deck.pop()!;
-      playerCard2 = deck.pop()!;
-    }
-
-    const dealerUp = deck.pop()!;
-    const dealerHole = deck.pop()!;
-
-    setMockDeck(deck);
-    setMockDealerHoleCard(dealerHole);
-    setPlayerHand([playerCard1!, playerCard2!]);
-    setDealerHand([dealerUp]);
-    setPhase("PlayerTurn");
-    setBalance(prev => prev - bet);
-    setLastBet(bet);
-    setLastResult(null);
-    setShowResultPopup(false);
-    setCurrentGameId(Date.now());
-    // Reset multi-hand split state
-    setAllHands([]);
-    setActiveHandIndex(0);
-    setHandResults([]);
-  }
-
-  // Debug function to start game that allows TRIPLE+ splits
-  // This arranges deck so split hands will also get pairs
-  function debugStartGameWithTripleSplit() {
-    const deck = createMockDeck();
-
-    // Pick a value that has 4 cards (for triple split potential)
-    const splitValues = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'jack', 'queen', 'king', 'ace'];
-    const targetValue = splitValues[Math.floor(Math.random() * splitValues.length)];
-
-    // Find ALL 4 cards with the target value
-    const matchingCards = deck.filter(c => c.value === targetValue);
-
-    // Remove all matching cards from deck
-    matchingCards.forEach(card => {
-      const idx = deck.indexOf(card);
-      if (idx !== -1) deck.splice(idx, 1);
-    });
-
-    // Stack the deck: put 2 matching cards on top (for the split draws)
-    // Then the player's 2 starting cards
-    const dealerUp = deck.pop()!;
-    const dealerHole = deck.pop()!;
-
-    // Place the matching cards at top of deck so splits will get pairs
-    // When you split: first hand gets matchingCards[2], second gets matchingCards[3]
-    if (matchingCards.length >= 4) {
-      deck.push(matchingCards[3]); // Will be drawn for second split hand
-      deck.push(matchingCards[2]); // Will be drawn for first split hand
-    }
-
-    setMockDeck(deck);
-    setMockDealerHoleCard(dealerHole);
-    setPlayerHand([matchingCards[0], matchingCards[1]]); // Starting pair
-    setDealerHand([dealerUp]);
-    setPhase("PlayerTurn");
-    setBalance(prev => prev - bet);
-    setLastBet(bet);
-    setLastResult(null);
-    setShowResultPopup(false);
-    setCurrentGameId(Date.now());
-    // Reset multi-hand split state
-    setAllHands([]);
-    setActiveHandIndex(0);
-    setHandResults([]);
-  }
-
-  // Debug function to start game that ends in a PUSH (Tie)
-  function debugStartGameWithPush() {
-    const deck = createMockDeck();
-
-    // Give player two 10s (20)
-    const playerCard1 = deck.find(c => (c.value === 10 || c.value === 'jack' || c.value === 'queen' || c.value === 'king'))!;
-    deck.splice(deck.indexOf(playerCard1), 1);
-    const playerCard2 = deck.find(c => (c.value === 10 || c.value === 'jack' || c.value === 'queen' || c.value === 'king'))!;
-    deck.splice(deck.indexOf(playerCard2), 1);
-
-    // Give dealer two 10s (20)
-    const dealerUp = deck.find(c => (c.value === 10 || c.value === 'jack' || c.value === 'queen' || c.value === 'king'))!;
-    deck.splice(deck.indexOf(dealerUp), 1);
-    const dealerHole = deck.find(c => (c.value === 10 || c.value === 'jack' || c.value === 'queen' || c.value === 'king'))!;
-    deck.splice(deck.indexOf(dealerHole), 1);
-
-    setMockDeck(deck);
-    setMockDealerHoleCard(dealerHole);
-    setPlayerHand([playerCard1, playerCard2]);
-    setDealerHand([dealerUp]);
-    setPhase("PlayerTurn");
-    setBalance(prev => prev - bet);
-    setLastBet(bet);
-    setLastResult(null);
-    setShowResultPopup(false);
-    setCurrentGameId(Date.now());
-    setAllHands([]);
-    setActiveHandIndex(0);
-    setHandResults([]);
-  }
-
-  // Helper function to move to next hand or finish the round
-  function moveToNextHandOrFinish(currentHandIdx: number, newHandResults: ('playing' | 'stand' | 'bust' | 'blackjack')[]) {
-    // Find next hand that is still 'playing' (move to higher index = further left)
-    let nextHandIdx = -1;
-    for (let i = currentHandIdx + 1; i < newHandResults.length; i++) {
-      if (newHandResults[i] === 'playing') {
-        nextHandIdx = i;
-        break;
-      }
-    }
-
-    if (nextHandIdx !== -1) {
-      // Move to next hand
-      setActiveHandIndex(nextHandIdx);
-    } else {
-      // All hands done - dealer plays
-      finishRoundWithDealer(newHandResults);
-    }
-  }
-
-  // Calculate final results for all hands against dealer
-  function finishRoundWithDealer(finalHandResults: ('playing' | 'stand' | 'bust' | 'blackjack')[]) {
-    const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
-
-    // Dealer plays (hits until 17)
-    let currentDealerHand = [...fullDealerHand];
-    let currentDeck = [...mockDeck];
-    while (calculateHandValue(currentDealerHand) < 17 && currentDeck.length > 0) {
-      currentDealerHand.push(currentDeck.pop()!);
-    }
-
-    setDealerHand(currentDealerHand);
-    setMockDeck(currentDeck);
-
-    const dealerFinalValue = calculateHandValue(currentDealerHand);
-
-    // Calculate total payout for all hands
-    let totalPayout = 0;
-
-    allHands.forEach((hand, idx) => {
-      const handValue = calculateHandValue(hand);
-      const handResult = finalHandResults[idx];
-
-      if (handResult === 'bust') {
-        // Already lost this bet
-      } else if (handResult === 'blackjack') {
-        totalPayout += Math.floor(lastBet * 2.5);
-      } else if (dealerFinalValue > 21) {
-        totalPayout += lastBet * 2;
-      } else if (handValue > dealerFinalValue) {
-        totalPayout += lastBet * 2;
-      } else if (handValue === dealerFinalValue) {
-        totalPayout += lastBet; // Push - return bet
-      } else {
-        // Dealer wins this hand
-      }
-    });
-
-    // Summary Result based on Net Profit
-    const totalInitialBet = lastBet * allHands.length;
-    let overallResult: Result = "Push";
-    if (totalPayout > totalInitialBet) {
-      overallResult = "PlayerWin";
-    } else if (totalPayout < totalInitialBet) {
-      overallResult = "DealerWin";
-    } else {
-      overallResult = "Push";
-    }
-
-    setPhase("RoundComplete");
-    setLastResult(overallResult);
-    setLastPayout(totalPayout);
-    setBalance(prev => prev + totalPayout);
-    setTimeout(() => setShowResultPopup(true), 500);
-  }
-
-  function debugHit() {
-    if (mockDeck.length === 0) return;
-
-    const newDeck = [...mockDeck];
-    const card = newDeck.pop()!;
-
-    if (!isSplitMode) {
-      // Normal single hand
-      const newHand = [...playerHand, card];
-      setMockDeck(newDeck);
-      setPlayerHand(newHand);
-
-      const handValue = calculateHandValue(newHand);
-      if (handValue > 21) {
-        // Bust - reveal dealer card and end
-        const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
-        setDealerHand(fullDealerHand);
-        setPhase("RoundComplete");
-        setLastResult("PlayerBust");
-        setLastPayout(0);
-        setTimeout(() => setShowResultPopup(true), 500);
-      }
-    } else {
-      // Split mode - hit the active hand
-      const newHands = [...allHands];
-      newHands[activeHandIndex] = [...newHands[activeHandIndex], card];
-      setMockDeck(newDeck);
-      setAllHands(newHands);
-
-      const handValue = calculateHandValue(newHands[activeHandIndex]);
-      if (handValue > 21) {
-        // This hand busts - mark it and move to next
-        const newResults = [...handResults];
-        newResults[activeHandIndex] = 'bust';
-        setHandResults(newResults);
-        moveToNextHandOrFinish(activeHandIndex, newResults);
-      }
-    }
-  }
-
-  function debugStand() {
-    if (!isSplitMode) {
-      // Normal single hand - dealer plays immediately
-      const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
-      const { finalDealerHand, result, payout } = debugDealerPlay(fullDealerHand, mockDeck, playerValue);
-
-      setDealerHand(finalDealerHand);
-      setPhase("RoundComplete");
-      setLastResult(result);
-      setLastPayout(payout);
-      setBalance(prev => prev + payout);
-      setTimeout(() => setShowResultPopup(true), 500);
-    } else {
-      // Split mode - mark this hand as done and move to next
-      const newResults = [...handResults];
-      newResults[activeHandIndex] = 'stand';
-      setHandResults(newResults);
-      moveToNextHandOrFinish(activeHandIndex, newResults);
-    }
-  }
-
-  function debugDoubleDown() {
-    if (mockDeck.length === 0) return;
-    if (balance < lastBet) return;
-
-    // Double the bet
-    setBalance(prev => prev - lastBet);
-
-    // Draw one card
-    const newDeck = [...mockDeck];
-    const card = newDeck.pop()!;
-
-    if (!isSplitMode) {
-      // Normal single hand
-      const newBet = lastBet * 2;
-      setLastBet(newBet);
-      const newHand = [...playerHand, card];
-      setMockDeck(newDeck);
-      setPlayerHand(newHand);
-
-      // Then stand automatically
-      setTimeout(() => {
-        const handValue = calculateHandValue(newHand);
-        const fullDealerHand = mockDealerHoleCard ? [...dealerHand, mockDealerHoleCard] : dealerHand;
-
-        if (handValue > 21) {
-          setDealerHand(fullDealerHand);
-          setPhase("RoundComplete");
-          setLastResult("PlayerBust");
-          setLastPayout(0);
-          setTimeout(() => setShowResultPopup(true), 1000);
-        } else {
-          const { finalDealerHand, result, payout } = debugDealerPlay(fullDealerHand, newDeck, handValue);
-          setDealerHand(finalDealerHand);
-          setPhase("RoundComplete");
-          setLastResult(result);
-          setLastPayout(payout);
-          setBalance(prev => prev + payout);
-          setTimeout(() => setShowResultPopup(true), 1000);
-        }
-      }, 300);
-    } else {
-      // Split mode - double on current hand then move to next
-      const newHands = [...allHands];
-      newHands[activeHandIndex] = [...newHands[activeHandIndex], card];
-      setMockDeck(newDeck);
-      setAllHands(newHands);
-
-      const handValue = calculateHandValue(newHands[activeHandIndex]);
-      const newResults = [...handResults];
-      newResults[activeHandIndex] = handValue > 21 ? 'bust' : 'stand';
-      setHandResults(newResults);
-
-      // Move to next hand
-      setTimeout(() => {
-        moveToNextHandOrFinish(activeHandIndex, newResults);
-      }, 300);
-    }
-  }
-
-  function debugSplit() {
-    // Determine which hand we're splitting
-    const handToSplit = isSplitMode ? allHands[activeHandIndex] : playerHand;
-
-    if (handToSplit.length !== 2) return;
-    if (handToSplit[0].value !== handToSplit[1].value) return;
-    if (balance < lastBet) return;
-    if (mockDeck.length < 2) return;
-
-    // Deduct additional bet for split
-    setBalance(prev => prev - lastBet);
-
-    const newDeck = [...mockDeck];
-
-    // Split the hand: first card goes to new hand (will be further left), second stays in current
-    const leftCard = handToSplit[0];
-    const rightCard = handToSplit[1];
-
-    // Deal one card to each hand
-    const newLeftCard = newDeck.pop()!;
-    const newRightCard = newDeck.pop()!;
-
-    setMockDeck(newDeck);
-
-    if (!isSplitMode) {
-      // First split: initialize allHands with two hands
-      // Index 0 = rightmost (current), higher indices = further left
-      setAllHands([
-        [rightCard, newRightCard],  // Index 0: rightmost hand (played first)
-        [leftCard, newLeftCard]     // Index 1: left hand (played second)
-      ]);
-      setActiveHandIndex(0);
-      setHandResults(['playing', 'playing']);
-      setPlayerHand([]); // Clear playerHand since we're using allHands now
-    } else {
-      // Re-split: insert a new hand after current position
-      const newHands = [...allHands];
-      const newResults = [...handResults];
-
-      // Update current hand with rightCard
-      newHands[activeHandIndex] = [rightCard, newRightCard];
-
-      // Insert new hand after current (higher index = further left)
-      newHands.splice(activeHandIndex + 1, 0, [leftCard, newLeftCard]);
-      newResults.splice(activeHandIndex + 1, 0, 'playing');
-
-      setAllHands(newHands);
-      setHandResults(newResults);
-    }
-  }
-
-  // ============================================================================
-  // NORMAL ACTION HANDLERS (uses blockchain or debug mode)
+  // ACTION HANDLERS (blockchain only)
   // ============================================================================
 
   const handleAction = async (action: string, args: object = {}) => {
-    if (debugMode) return; // Debug mode uses separate handlers
-
     setBusy(true);
     try {
       let mutation: string;
@@ -797,6 +343,8 @@ export default function Blackjack() {
       } else if (action === "doubleDown") {
         mutation = `mutation { doubleDown }`;
         setWaitingForResult(true);
+      } else if (action === "split") {
+        mutation = `mutation { split }`;
       } else {
         throw new Error(`Unknown action: ${action}`);
       }
@@ -816,20 +364,12 @@ export default function Blackjack() {
 
   async function onStartGame() {
     if (busy) return;
-    if (debugMode) {
-      debugStartGame();
-      return;
-    }
     setLastBet(bet);
     await handleAction("playBlackjack", { bet });
   }
 
   async function onHit() {
     if (busy || phase !== "PlayerTurn") return;
-    if (debugMode) {
-      debugHit();
-      return;
-    }
     await handleAction("hit");
     setTimeout(async () => {
       await refresh();
@@ -841,11 +381,12 @@ export default function Blackjack() {
 
   async function onStand() {
     if (busy || phase !== "PlayerTurn") return;
-    if (debugMode) {
-      debugStand();
-      return;
-    }
     await handleAction("stand");
+  }
+
+  async function onSplit() {
+    if (busy || phase !== "PlayerTurn") return;
+    await handleAction("split");
   }
 
   async function onDoubleDown() {
@@ -854,10 +395,6 @@ export default function Blackjack() {
     const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
     if (!handToCheck || handToCheck.length !== 2) return;
     if (balance < lastBet) return;
-    if (debugMode) {
-      debugDoubleDown();
-      return;
-    }
     await handleAction("doubleDown");
   }
 
@@ -896,35 +433,6 @@ export default function Blackjack() {
         {/* Header */}
         <Header />
 
-        {/* Debug Mode Toggle - Top Left (below header) */}
-        <div className="fixed top-20 left-4 z-50 flex flex-col gap-2">
-          <button
-            onClick={() => {
-              const newDebugMode = !debugMode;
-              setDebugMode(newDebugMode);
-              if (newDebugMode) {
-                setBalance(100);
-                setPhase("WaitingForGame");
-                setPlayerHand([]);
-                setDealerHand([]);
-                setIsConnected(true);
-              }
-            }}
-            className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${debugMode
-              ? "bg-red-600 text-white border-2 border-red-400 shadow-lg shadow-red-500/50"
-              : "bg-gray-800/80 text-gray-400 border border-gray-600 hover:bg-gray-700"
-              }`}
-          >
-            🛠️ {debugMode ? "DEBUG ON" : "Debug Off"}
-          </button>
-
-          {/* Balance Display */}
-          <div className={`px-3 py-2 rounded-lg text-center font-bold ${debugMode ? "bg-red-900/80 border border-red-500" : "bg-black/60 border border-white/20"
-            }`}>
-            <div className="text-xs text-white/60">Balance</div>
-            <div className="text-xl text-yellow-400">{balance} 🪙</div>
-          </div>
-        </div>
 
         {/* History Button - Bottom Left Corner (always visible) */}
         <button
@@ -979,47 +487,6 @@ export default function Blackjack() {
                   />
                 </button>
 
-                {/* Debug Split Deal Button - only visible in debug mode */}
-                {debugMode && (
-                  <button
-                    onClick={debugStartGameWithSplit}
-                    disabled={busy || balance < bet}
-                    className="w-full mt-2 px-4 py-2 bg-gradient-to-b from-red-500 to-red-700 border-2 border-red-400 rounded-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-white font-bold">✂️ Deal Split</span>
-                    </div>
-                    <div className="text-xs text-red-200">Debug: Forces splittable hand</div>
-                  </button>
-                )}
-
-                {/* Debug Triple Split Button - only visible in debug mode */}
-                {debugMode && (
-                  <button
-                    onClick={debugStartGameWithTripleSplit}
-                    disabled={busy || balance < bet * 4} // Need money for up to 4 hands
-                    className="w-full mt-2 px-4 py-2 bg-gradient-to-b from-orange-500 to-orange-700 border-2 border-orange-400 rounded-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-white font-bold">✂️✂️✂️ Triple Split</span>
-                    </div>
-                    <div className="text-xs text-orange-200">Debug: 4 same cards for multi-split</div>
-                  </button>
-                )}
-
-                {/* Debug Push Deal Button - only visible in debug mode */}
-                {debugMode && (
-                  <button
-                    onClick={debugStartGameWithPush}
-                    disabled={busy || balance < bet}
-                    className="w-full mt-2 px-4 py-2 bg-gradient-to-b from-gray-500 to-gray-700 border-2 border-gray-400 rounded-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-white font-bold">🤝 Deal Push</span>
-                    </div>
-                    <div className="text-xs text-gray-200">Debug: Ties with dealer</div>
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -1048,7 +515,9 @@ export default function Blackjack() {
               {/* Dealer Hand - Top Area */}
               <div className="w-full max-w-lg flex flex-col items-center mt-[145px]">
                 <div className="text-lg font-semibold text-white/80 mb-2 drop-shadow-lg">
-                  Dealer ({renderHandValue(dealerHand)})
+                  Dealer ({phase === "PlayerTurn" && dealerHand.length > 1
+                    ? `${calculateHandValue([dealerHand[0]])} + ?`
+                    : calculateHandValue(dealerHand)})
                 </div>
                 <div className="flex justify-center min-h-[140px] items-center px-4">
                   {dealerHand.map((card, idx) => (
@@ -1182,7 +651,7 @@ export default function Blackjack() {
                     <div className="grid grid-cols-2 gap-3">
                       {/* Top Row: Split, Double */}
                       <button
-                        onClick={() => { if (debugMode) debugSplit(); }}
+                        onClick={onSplit}
                         disabled={busy || balance < lastBet || (() => {
                           // Check if current hand can be split
                           const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
@@ -1259,7 +728,7 @@ export default function Blackjack() {
           {/* History Modal */}
           {showHistory && (
             <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-              <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-lg border-2 border-green-600 p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="bg-gradient-to-br from-green-900 to-green-950 rounded-lg border-2 border-green-600 p-6 max-w-5xl w-full max-h-[80vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-3xl font-bold text-green-400">Game History</h2>
                   <button onClick={() => setShowHistory(false)} className="text-white text-3xl">✕</button>
@@ -1268,13 +737,55 @@ export default function Blackjack() {
                   const normalizedResult = normalizeResult(game.result);
                   const gameIsWin = normalizedResult === "PLAYER_BLACKJACK" || normalizedResult === "PLAYER_WIN" || normalizedResult === "DEALER_BUST";
                   const gameNet = game.payout - game.bet;
+                  // Get player hand (first hand from playerHands array)
+                  const playerCards = game.playerHands && game.playerHands.length > 0 ? normalizeCards(game.playerHands[0]) : [];
+                  const dealerCards = game.dealerHand ? normalizeCards(game.dealerHand) : [];
+                  const playerTotal = calculateHandValue(playerCards);
+                  const dealerTotal = calculateHandValue(dealerCards);
+
                   return (
-                    <div key={i} className="border-b border-green-700 py-2">
-                      <div className="flex justify-between">
-                        <span>{new Date(game.timestamp / 1000).toLocaleTimeString()}</span>
-                        <span className={gameIsWin ? "text-green-400" : "text-red-400"}>
-                          {normalizedResult && renderResult(normalizedResult as any)} ({gameNet > 0 ? `+${gameNet}` : gameNet})
+                    <div key={i} className="border-b border-green-700 py-4">
+                      {/* Result and Time Row */}
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-400 text-sm">{new Date(game.timestamp / 1000).toLocaleTimeString()}</span>
+                        <span className={gameIsWin ? "text-green-400 font-bold text-lg" : "text-red-400 font-bold text-lg"}>
+                          {normalizedResult && renderResult(normalizedResult as any)} ({gameNet > 0 ? `+${gameNet}` : gameNet} chips)
                         </span>
+                      </div>
+                      {/* Cards Row */}
+                      <div className="flex justify-between items-start gap-4">
+                        {/* Player Cards */}
+                        <div className="flex flex-col gap-1">
+                          <span className="text-white/70 text-sm">You ({playerTotal}):</span>
+                          <div className="flex gap-1">
+                            {playerCards.map((card, idx) => (
+                              <div key={idx} style={{ marginLeft: idx > 0 ? '-15px' : '0' }}>
+                                <CardComp
+                                  suit={card.suit as any}
+                                  value={card.value as any}
+                                  width={45}
+                                  height={63}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Dealer Cards */}
+                        <div className="flex flex-col gap-1 items-end">
+                          <span className="text-white/70 text-sm">Dealer ({dealerTotal}):</span>
+                          <div className="flex gap-1">
+                            {dealerCards.map((card, idx) => (
+                              <div key={idx} style={{ marginLeft: idx > 0 ? '-15px' : '0' }}>
+                                <CardComp
+                                  suit={card.suit as any}
+                                  value={card.value as any}
+                                  width={45}
+                                  height={63}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );

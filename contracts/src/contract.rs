@@ -97,6 +97,10 @@ impl Contract for ContractsContract {
                 self.handle_play_baccarat(signer, amount, bet_type).await;
             }
 
+            Operation::Split => {
+                self.handle_split(signer).await;
+            }
+
 
         }
     }
@@ -245,25 +249,121 @@ impl ContractsContract {
             .send_to(bank_chain_id);
     }
     
-    /// Player hits - local computation
+    /// Player hits - draws a card for the current active hand
     async fn handle_hit(&mut self, _signer: linera_base::identifiers::AccountOwner) {
         let mut game = self.state.current_game.get().clone()
             .expect("No active game");
         assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
         
-        // Draw a card
+        let hand_idx = game.active_hand_index as usize;
         let card = game.deck.pop().expect("Deck empty");
-        game.player_hand.push(card);
+        game.player_hands[hand_idx].push(card);
         game.actions.push(GameAction::Hit);
         
-        let player_value = calculate_hand_value(&game.player_hand);
+        let hand_value = calculate_hand_value(&game.player_hands[hand_idx]);
         
-        if player_value > 21 {
-            // Bust - report to Bank immediately
+        if hand_value > 21 {
+            // This hand busted. Move to next hand or finish.
+            self.move_to_next_hand_or_finish(&mut game).await;
+        } else {
+            self.state.current_game.set(Some(game));
+        }
+    }
+    
+    /// Player stands - finishes the current active hand
+    async fn handle_stand(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        
+        game.actions.push(GameAction::Stand);
+        self.move_to_next_hand_or_finish(&mut game).await;
+    }
+    
+    /// Player doubles down - double bet for current hand, draw one card, then stand
+    async fn handle_double_down(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        
+        let hand_idx = game.active_hand_index as usize;
+        assert!(game.player_hands[hand_idx].len() == 2, "Double down only allowed on first 2 cards");
+        
+        // Check if player has enough balance to double (using the original hand bet)
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= game.bet, "Insufficient balance to double");
+        
+        // Deduct the additional bet
+        self.state.player_balance.set(balance - game.bet);
+        // Note: For multi-hand, we might want to track bets per hand, but for now 
+        // we'll keep it simple: the escrowed bet is the BASE bet. 
+        // We'll just increase the total reported bet in the action list if needed, 
+        // or let the bank calculate it based on actions.
+        
+        // Draw exactly one card
+        let card = game.deck.pop().expect("Deck empty");
+        game.player_hands[hand_idx].push(card);
+        game.actions.push(GameAction::DoubleDown);
+        
+        self.move_to_next_hand_or_finish(&mut game).await;
+    }
+
+    /// Player splits - splits a pair into two hands
+    async fn handle_split(&mut self, _signer: linera_base::identifiers::AccountOwner) {
+        let mut game = self.state.current_game.get().clone()
+            .expect("No active game");
+        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
+        
+        let hand_idx = game.active_hand_index as usize;
+        let hand = &game.player_hands[hand_idx];
+        assert!(hand.len() == 2, "Can only split with exactly 2 cards");
+        
+        // Standard blackjack split: cards must have same value
+        // We'll use get_card_numeric_value equivalent here
+        fn get_val(c: &Card) -> u8 {
+            match c.value.as_str() {
+                "ace" => 11,
+                "king" | "queen" | "jack" => 10,
+                v => v.parse().unwrap_or(0),
+            }
+        }
+        assert!(get_val(&hand[0]) == get_val(&hand[1]), "Cards must have same value to split");
+        
+        // Check balance for additional bet
+        let balance = *self.state.player_balance.get();
+        assert!(balance >= game.bet, "Insufficient balance to split");
+        self.state.player_balance.set(balance - game.bet);
+        
+        // Perform the split
+        let card2 = game.player_hands[hand_idx].pop().unwrap();
+        let new_hand = vec![card2];
+        
+        // Add new hand to the list (standard: new hand is added to the end)
+        game.player_hands.push(new_hand);
+        
+        // Draw new cards for BOTH hands
+        let draw1 = game.deck.pop().expect("Deck empty");
+        game.player_hands[hand_idx].push(draw1);
+        
+        let last_idx = game.player_hands.len() - 1;
+        let draw2 = game.deck.pop().expect("Deck empty");
+        game.player_hands[last_idx].push(draw2);
+        
+        game.actions.push(GameAction::Split);
+        self.state.current_game.set(Some(game));
+    }
+
+    /// Internal: Move to the next hand or finish the round
+    async fn move_to_next_hand_or_finish(&mut self, game: &mut ActiveGame) {
+        // Move to the next hand if one exists
+        if (game.active_hand_index as usize) + 1 < game.player_hands.len() {
+            game.active_hand_index += 1;
+            self.state.current_game.set(Some(game.clone()));
+        } else {
+            // All hands done - report to Bank
             game.phase = GamePhase::RoundComplete;
             self.state.current_game.set(Some(game.clone()));
             
-            // Send result to Bank
             let bank_chain_id = self.bank_chain_id();
             let player = self.runtime.authenticated_signer().expect("Must be signed");
             
@@ -275,70 +375,7 @@ impl ContractsContract {
                 })
                 .with_tracking()
                 .send_to(bank_chain_id);
-        } else {
-            self.state.current_game.set(Some(game));
         }
-    }
-    
-    /// Player stands - report to Bank for verification
-    async fn handle_stand(&mut self, _signer: linera_base::identifiers::AccountOwner) {
-        let mut game = self.state.current_game.get().clone()
-            .expect("No active game");
-        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
-        
-        game.actions.push(GameAction::Stand);
-        game.phase = GamePhase::RoundComplete;
-        self.state.current_game.set(Some(game.clone()));
-        
-        // Send result to Bank for verification
-        let bank_chain_id = self.bank_chain_id();
-        let player = self.runtime.authenticated_signer().expect("Must be signed");
-        
-        self.runtime
-            .prepare_message(Message::ReportResult {
-                game_id: game.game_id,
-                player,
-                actions: game.actions.clone(),
-            })
-            .with_tracking()
-            .send_to(bank_chain_id);
-    }
-    
-    /// Player doubles down - double bet, draw one card, then stand
-    /// Only allowed on first 2 cards
-    async fn handle_double_down(&mut self, _signer: linera_base::identifiers::AccountOwner) {
-        let mut game = self.state.current_game.get().clone()
-            .expect("No active game");
-        assert!(game.phase == GamePhase::PlayerTurn, "Not your turn");
-        assert!(game.player_hand.len() == 2, "Double down only allowed on first 2 cards");
-        
-        // Check if player has enough balance to double
-        let balance = *self.state.player_balance.get();
-        assert!(balance >= game.bet, "Insufficient balance to double");
-        
-        // Deduct the additional bet
-        self.state.player_balance.set(balance - game.bet);
-        game.bet = game.bet * 2; // Double the bet
-        
-        // Draw exactly one card
-        let card = game.deck.pop().expect("Deck empty");
-        game.player_hand.push(card);
-        
-        game.actions.push(GameAction::DoubleDown);
-        game.phase = GamePhase::RoundComplete;
-        self.state.current_game.set(Some(game.clone()));
-        
-        // Send result to Bank for verification
-        let bank_chain_id = self.bank_chain_id();
-        let player = self.runtime.authenticated_signer().expect("Must be signed");
-        
-        self.runtime
-            .prepare_message(Message::ReportResult {
-                game_id: game.game_id,
-                player,
-                actions: game.actions.clone(),
-            })
-            .send_to(bank_chain_id);
     }
 
     /// Player starts a Roulette game - deducts total bet and sends to Bank
@@ -390,17 +427,21 @@ impl ContractsContract {
         let dealer_hole = deck.pop().unwrap();
         
         let player_hand = vec![player_card1, player_card2];
-        let dealer_hand = vec![dealer_up]; // Only show up card
         
-        let mut phase = GamePhase::PlayerTurn;
-        let mut actions = Vec::new();
+        let phase = GamePhase::PlayerTurn;
+        let actions = Vec::new();
         
-        // Check for instant blackjack
+        // Check for instant blackjack (not currently used but kept for future logic)
         let player_value = calculate_hand_value(&player_hand);
-        if player_value == 21 {
-            // Blackjack! Auto-stand and report
-            phase = GamePhase::RoundComplete;
-            actions.push(GameAction::Stand);
+        let dealer_full_hand = vec![dealer_up.clone(), dealer_hole.clone()];
+        let dealer_value = calculate_hand_value(&dealer_full_hand);
+        
+        let _player_has_blackjack = player_value == 21;
+        let _dealer_has_blackjack = dealer_value == 21;
+
+        let mut dealer_hand = vec![dealer_up.clone()];
+        if phase == GamePhase::RoundComplete {
+            dealer_hand.push(dealer_hole.clone());
         }
         
         let game = ActiveGame {
@@ -409,7 +450,8 @@ impl ContractsContract {
             bet,
             game_type: GameType::Blackjack,
             phase,
-            player_hand,
+            player_hands: vec![player_hand], // Initial single hand in hands list
+            active_hand_index: 0,
             dealer_hand,
             dealer_hole_card: Some(dealer_hole),
             deck,
@@ -418,7 +460,7 @@ impl ContractsContract {
         
         self.state.current_game.set(Some(game.clone()));
         
-        // If blackjack, auto-report
+        // If the game is complete, auto-report
         if phase == GamePhase::RoundComplete {
             let bank_chain_id = self.bank_chain_id();
             if let Some(player) = self.runtime.authenticated_signer() {
@@ -448,7 +490,7 @@ impl ContractsContract {
                 let record = GameRecord {
                     game_id,
                     game_type: game.game_type,
-                    player_hand: game.player_hand.clone(),
+                    player_hands: game.player_hands.clone(),
                     dealer_hand: dealer_hand, // Use full dealer hand from Bank
                     bet: game.bet,
                     result,
@@ -527,7 +569,7 @@ impl ContractsContract {
         let record = GameRecord {
             game_id,
             game_type: GameType::Roulette,
-            player_hand: vec![],
+            player_hands: vec![],
             dealer_hand: vec![],
             bet: total_bet,
             result: if payout > 0 { GameResult::PlayerWin } else { GameResult::DealerWin },
@@ -599,7 +641,7 @@ impl ContractsContract {
         let record = GameRecord {
             game_id,
             game_type: GameType::Baccarat,
-            player_hand, 
+            player_hands: vec![player_hand], 
             dealer_hand: banker_hand, // Map banker hand to dealer hand field
             bet: bet_amount,
             result, // This is lossy, maybe we should update GameRecord too?
@@ -870,69 +912,106 @@ impl ContractsContract {
         let dealer_up = deck.pop().unwrap();
         let dealer_hole = deck.pop().unwrap();
         
-        let mut player_hand = vec![player_card1, player_card2];
-        let mut dealer_hand = vec![dealer_up, dealer_hole];
+        let initial_player_hand = vec![player_card1, player_card2];
+        let mut player_hands = vec![initial_player_hand];
+        let initial_dealer_hand = vec![dealer_up, dealer_hole];
+        let mut dealer_hand = initial_dealer_hand.clone();
         
+        // Initial Blackjack Check (matches player_handle_game_ready)
+        let player_val = calculate_hand_value(&player_hands[0]);
+        let dealer_val = calculate_hand_value(&dealer_hand);
+        
+        if player_val == 21 || dealer_val == 21 {
+            // Instant settlement
+            if player_val == 21 && dealer_val != 21 {
+                return (GameResult::PlayerBlackjack, pending.bet * 5 / 2, dealer_hand);
+            } else if dealer_val == 21 && player_val != 21 {
+                return (GameResult::DealerWin, 0, dealer_hand);
+            } else {
+                return (GameResult::Push, pending.bet, dealer_hand);
+            }
+        }
+
         // Replay player actions
-        let mut doubled = false;
+        let mut active_idx = 0;
+        let mut bets = vec![pending.bet]; // Track bet for each hand
+        
         for action in actions {
+            if active_idx >= player_hands.len() { break; }
+            
             match action {
                 GameAction::Hit => {
                     let card = deck.pop().expect("Deck empty during replay");
-                    player_hand.push(card);
+                    player_hands[active_idx].push(card);
+                    if calculate_hand_value(&player_hands[active_idx]) > 21 {
+                        active_idx += 1;
+                    }
                 }
                 GameAction::Stand => {
-                    break; // Stop drawing
+                    active_idx += 1;
                 }
                 GameAction::DoubleDown => {
-                    // Double down: draw one card, then stop
                     let card = deck.pop().expect("Deck empty during replay");
-                    player_hand.push(card);
-                    doubled = true;
-                    break;
+                    player_hands[active_idx].push(card);
+                    bets[active_idx] *= 2;
+                    active_idx += 1;
+                }
+                GameAction::Split => {
+                    // Split active hand
+                    let card2 = player_hands[active_idx].pop().unwrap();
+                    let new_hand = vec![card2];
+                    player_hands.push(new_hand);
+                    bets.push(pending.bet);
+                    
+                    // Draw new cards
+                    player_hands[active_idx].push(deck.pop().unwrap());
+                    let last = player_hands.len() - 1;
+                    player_hands[last].push(deck.pop().unwrap());
                 }
             }
         }
         
-        // Adjust bet if doubled
-        let final_bet = if doubled { pending.bet * 2 } else { pending.bet };
+        // Dealer plays if there's any non-busted hand
+        let player_has_active_hand = player_hands.iter().any(|h| calculate_hand_value(h) <= 21);
         
-        let player_value = calculate_hand_value(&player_hand);
-        
-        // Check player bust
-        if player_value > 21 {
-            return (GameResult::PlayerBust, 0, dealer_hand);
-        }
-        
-        // Check player blackjack
-        if player_value == 21 && player_hand.len() == 2 {
-            let dealer_value = calculate_hand_value(&dealer_hand);
-            if dealer_value == 21 {
-                return (GameResult::Push, pending.bet, dealer_hand); // Push
-            } else {
-                // Blackjack pays 3:2
-                return (GameResult::PlayerBlackjack, pending.bet * 5 / 2, dealer_hand);
+        if player_has_active_hand {
+            while calculate_hand_value(&dealer_hand) < 17 {
+                let card = deck.pop().expect("Deck empty during dealer turn");
+                dealer_hand.push(card);
             }
-        }
-        
-        // Dealer plays (hits until 17+)
-        while calculate_hand_value(&dealer_hand) < 17 {
-            let card = deck.pop().expect("Deck empty during dealer turn");
-            dealer_hand.push(card);
         }
         
         let dealer_value = calculate_hand_value(&dealer_hand);
-        
-        // Determine result (use final_bet for doubled bets)
-        if dealer_value > 21 {
-            (GameResult::DealerBust, final_bet * 2, dealer_hand)
-        } else if player_value > dealer_value {
-            (GameResult::PlayerWin, final_bet * 2, dealer_hand)
-        } else if dealer_value > player_value {
-            (GameResult::DealerWin, 0, dealer_hand)
-        } else {
-            (GameResult::Push, final_bet, dealer_hand) // Push - return bet
+        let mut total_payout = 0;
+
+        for (i, hand) in player_hands.iter().enumerate() {
+            let p_val = calculate_hand_value(hand);
+            let bet = bets[i];
+            
+            if p_val > 21 {
+                // Hand busted
+            } else if dealer_value > 21 {
+                total_payout += bet * 2;
+            } else if p_val > dealer_value {
+                total_payout += bet * 2;
+            } else if p_val == dealer_value {
+                total_payout += bet;
+            } else {
+                // Dealer wins
+            }
         }
+
+        // Determine summary result for record keeping
+        let total_bet: u64 = bets.iter().sum();
+        let result = if total_payout > total_bet {
+            GameResult::PlayerWin
+        } else if total_payout < total_bet {
+            GameResult::DealerWin
+        } else {
+            GameResult::Push
+        };
+
+        (result, total_payout, dealer_hand)
     }
 }
 

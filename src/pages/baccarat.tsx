@@ -89,7 +89,7 @@ export default function BaccaratPage() {
                     bet
                     payout
                     timestamp
-                    playerHand { suit value }
+                    playerHands { suit value }
                     dealerHand { suit value }
                 }
             }
@@ -101,20 +101,24 @@ export default function BaccaratPage() {
                     .filter((g: any) => g.gameType === "BACCARAT")
                     .reverse(); // Newest first
 
-                // Map to local format
-                const mappedHistory = baccHistory.map((g: any) => ({
-                    gameId: g.gameId,
-                    playerHand: g.playerHand,
-                    bankerHand: g.dealerHand,
-                    bet: g.bet,
-                    betType: "PLAYER" as BaccaratBetType,
-                    winner: g.baccaratWinner,
-                    payout: g.payout,
-                    timestamp: g.timestamp,
-                    playerScore: calculateBaccaratScore(g.playerHand),
-                    bankerScore: calculateBaccaratScore(g.dealerHand),
-                    isNatural: false
-                }));
+                // Map to local format - playerHands is now Vec<Vec<Card>>, take first hand
+                const mappedHistory = baccHistory.map((g: any) => {
+                    // Extract first hand from playerHands array (baccarat only has one hand)
+                    const playerHand = g.playerHands && g.playerHands.length > 0 ? g.playerHands[0] : [];
+                    return {
+                        gameId: g.gameId,
+                        playerHand: playerHand,
+                        bankerHand: g.dealerHand,
+                        bet: g.bet,
+                        betType: "PLAYER" as BaccaratBetType,
+                        winner: g.baccaratWinner,
+                        payout: g.payout,
+                        timestamp: g.timestamp,
+                        playerScore: calculateBaccaratScore(playerHand),
+                        bankerScore: calculateBaccaratScore(g.dealerHand),
+                        isNatural: false
+                    };
+                });
 
                 setHistory(mappedHistory);
 
