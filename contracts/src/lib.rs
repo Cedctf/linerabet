@@ -63,6 +63,9 @@ pub enum Operation {
     
     /// Double Down - double bet, take one card, then stand (only on first 2 cards)
     DoubleDown,
+    
+    /// Split - split a pair into two hands (only if first 2 cards match value)
+    Split,
 
     /// Play Roulette with a list of bets
     PlayRoulette { bets: Vec<RouletteBet> },
@@ -198,6 +201,7 @@ pub enum GameAction {
     Hit,
     Stand,
     DoubleDown,
+    Split,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Enum, PartialEq, Eq)]
