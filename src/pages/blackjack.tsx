@@ -877,13 +877,14 @@ export default function Blackjack() {
                           if (!handToCheck || handToCheck.length !== 2) return true;
                           return handToCheck[0]?.value !== handToCheck[1]?.value;
                         })()}
-                        className="relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-b from-blue-500 to-blue-700 border-4 border-blue-300 rounded-xl shadow-lg flex items-center justify-center"
-                        style={{ width: '8vw', height: '18vh', minWidth: '80px' }}
+                        className="group relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ width: '8vw', height: '18vh' }}
                       >
-                        <div className="flex flex-col items-center">
-                          <span className="text-white font-bold text-lg drop-shadow-lg">SPLIT</span>
-                          <span className="text-yellow-300 font-semibold text-sm">✂️</span>
-                        </div>
+                        <img
+                          src="/buttons/split.png"
+                          alt="Split"
+                          className="w-full h-full object-contain"
+                        />
                       </button>
 
                       <button
@@ -892,13 +893,14 @@ export default function Blackjack() {
                           const handToCheck = isSplitMode ? allHands[activeHandIndex] : playerHand;
                           return !handToCheck || handToCheck.length !== 2;
                         })()}
-                        className="relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-b from-purple-500 to-purple-700 border-4 border-purple-300 rounded-xl shadow-lg flex items-center justify-center"
-                        style={{ width: '8vw', height: '18vh', minWidth: '80px' }}
+                        className="group relative hover:scale-110 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ width: '8vw', height: '18vh' }}
                       >
-                        <div className="flex flex-col items-center">
-                          <span className="text-white font-bold text-lg drop-shadow-lg">DOUBLE</span>
-                          <span className="text-yellow-300 font-semibold text-sm">x2</span>
-                        </div>
+                        <img
+                          src="/buttons/double.png"
+                          alt="Double"
+                          className="w-full h-full object-contain"
+                        />
                       </button>
 
                       {/* Bottom Row: Hit, Stand */}
