@@ -20,7 +20,7 @@ function Header() {
           </Link>
 
           {/* Navigation - Centered */}
-          <nav className="hidden md:flex space-x-8 justify-center">
+          <nav className="hidden md:flex space-x-6 justify-center items-center">
             <Link to="/games" className="hover:text-green-400 text-white transition-colors">Games</Link>
             <a href="#" className="hover:text-green-400 text-white transition-colors">About</a>
             <a href="#" className="hover:text-green-400 text-white transition-colors">Rewards</a>

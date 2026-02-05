@@ -22,7 +22,7 @@ export async function gql<T = any>(body: GqlPayload): Promise<T> {
 // If your page types still use UPPER_SNAKE_CASE, update them there.
 
 export type GameRecord = {
-  playerHand: { suit: string; value: string; id: string }[];
+  playerHands: { suit: string; value: string; id: string }[][];  // Now 2D array
   dealerHand: { suit: string; value: string; id: string }[];
   bet: number;
   result: "PlayerBlackjack" | "PlayerWin" | "DealerWin" | "PlayerBust" | "DealerBust" | "Push";
@@ -44,7 +44,7 @@ export async function fetchState() {
     | "PlayerBust"
     | "DealerBust"
     | "Push";
-    playerHand: { suit: string; value: string; id: string }[];
+    playerHands: { suit: string; value: string; id: string }[][];
     dealerHand: { suit: string; value: string; id: string }[];
     roundStartTime: number;
     gameHistory: GameRecord[];
@@ -55,11 +55,11 @@ export async function fetchState() {
       allowedBets
       phase
       lastResult
-      playerHand { id suit value }
+      playerHands { id suit value }
       dealerHand { id suit value }
       roundStartTime
       gameHistory {
-        playerHand { id suit value }
+        playerHands { id suit value }
         dealerHand { id suit value }
         bet
         result

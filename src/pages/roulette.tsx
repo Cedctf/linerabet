@@ -6,16 +6,17 @@ import "../components/roulette/roulette.css";
 import { lineraAdapter } from "@/lib/linera-adapter";
 import { CONTRACTS_APP_ID } from "@/constants";
 import { useGame } from "@/context/GameContext";
-import { BLACK_NUMBERS, WHEEL_NUMBERS } from "@/lib/roulette-utils";
 import { RouletteBoardBlueprint, BET_REGISTRY, calculatePayout } from "../components/roulette-blueprint";
 import type { BetPayload } from "../components/roulette-blueprint";
+import { WHEEL_NUMBERS, BLACK_NUMBERS, type GameRecord, type Bet, type BetResult } from "../lib/roulette-utils";
 
 
 
 const RoulettePage = () => {
-  const { lineraData, refreshData, setPendingBet, setBalanceLocked, balanceLocked } = useGame();
+  const { lineraData, refreshData, setPendingBet, setBalanceLocked, balanceLocked, isDebugMode, debugBalance, setDebugBalance } = useGame();
+  const [debugHistory, setDebugHistory] = useState<GameRecord[]>([]);
   // derived balance from context
-  const serverBalance = lineraData?.gameBalance || 0;
+  const serverBalance = isDebugMode ? debugBalance : (lineraData?.gameBalance || 0);
   const isConnected = !!lineraData;
 
   const [selectedChip, setSelectedChip] = useState<number>(1);
@@ -149,7 +150,68 @@ const RoulettePage = () => {
   };
 
   const spin = async () => {
+    if (placedBets.size === 0) {
+      alert("Please place at least one bet!");
+      return;
+    }
+
     setBusy(true);
+
+    if (isDebugMode) {
+      // Simulation for Debug Mode
+      setStage(GameStages.NO_MORE_BETS);
+
+      const winningNumber = WHEEL_NUMBERS[Math.floor(Math.random() * WHEEL_NUMBERS.length)];
+      const isRed = !BLACK_NUMBERS.includes(winningNumber) && winningNumber !== 0;
+
+      // Calculate winnings
+      let totalWin = 0;
+      const betResults: BetResult[] = [];
+      const betsArg: Bet[] = [];
+
+      for (const [betId, amount] of placedBets.entries()) {
+        const config = BET_REGISTRY[betId];
+        const win = calculatePayout(betId, amount, winningNumber);
+        totalWin += win;
+
+        betsArg.push({
+          betType: config!.type as any,
+          amount,
+          selection: config!.numbers[0] || 0
+        });
+
+        betResults.push({
+          bet: { betType: config!.type as any, amount, selection: config!.numbers[0] || 0 },
+          won: win > 0,
+          payout: win
+        });
+      }
+
+      setLastBets(new Map(placedBets));
+
+      // Show animation
+      setWinningNumber({ next: winningNumber.toString(), onStop: () => handleSpinEnd(winningNumber) });
+
+      // Update debug balance (simulated)
+      // Note: effective total bet is already paid when placing? No, in roulette usually we subtract on spin.
+      const totalBet = Array.from(placedBets.values()).reduce((a, b) => a + b, 0);
+      setDebugBalance(debugBalance - totalBet + totalWin);
+
+      const newRecord: GameRecord = {
+        bets: betsArg,
+        spinResult: {
+          winningNumber,
+          isRed,
+          totalPayout: totalWin,
+          betResults
+        },
+        timestamp: Date.now()
+      };
+      setDebugHistory(prev => [newRecord, ...prev]);
+
+      return;
+    }
+
     setStage(GameStages.NO_MORE_BETS);
     // Keep pendingBet during spin - will be cleared after mutation confirms
 
@@ -379,7 +441,7 @@ const RoulettePage = () => {
         {/* Header - Top bar */}
         <div className="absolute top-0 left-0 w-full flex justify-between items-center p-4 z-50">
           <div className="text-2xl font-bold text-yellow-400 drop-shadow-lg">
-            Balance: ${serverBalance}
+            {isDebugMode ? "Debug Balance: " : "Balance: "}${serverBalance}
           </div>
         </div>
 

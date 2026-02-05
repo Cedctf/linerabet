@@ -70,6 +70,60 @@ export const calculateHandValue = (cards: BlackjackCard[]): number => {
 };
 
 /**
+ * Format hand value for display, showing soft values if applicable (e.g., "7 / 17")
+ */
+export const renderHandValue = (cards: BlackjackCard[]): string => {
+  if (cards.length === 0) return "0";
+
+  let sum = 0;
+  let aces = 0;
+
+  cards.forEach(card => {
+    const val = card.value;
+    if (val === 'ace') {
+      aces += 1;
+      sum += 11;
+    } else if (val === 'jack' || val === 'queen' || val === 'king') {
+      sum += 10;
+    } else if (typeof val === 'number') {
+      sum += val;
+    } else {
+      const numVal = parseInt(val, 10);
+      sum += isNaN(numVal) ? 0 : numVal;
+    }
+  });
+
+  // If there are no aces, just return the sum
+  if (aces === 0) return sum.toString();
+
+  // If we have aces, calculate soft and hard totals
+  // Hard total is with all aces as 1 except one (possibly)
+  // Actually, standard blackjack "soft" display:
+  // If sum > 21, we have to reduce.
+  while (sum > 21 && aces > 0) {
+    sum -= 10;
+    aces -= 1;
+  }
+
+  // After adjustment, if we still have "flexible" aces (those counted as 11)
+  // we can show both values if the difference doesn't bust.
+  // In our loop above, 'sum' is the highest possible value <= 21 or the lowest > 21.
+  // If sum <= 21 and we count one ace as 11 (the rest as 1), it's "soft".
+  // If we reduced ALL aces to 1, it's "hard".
+
+  if (aces > 0 && sum <= 21) {
+    // This sum has at least one Ace counted as 11.
+    // The "hard" value would be sum - 10.
+    const hardValue = sum - 10;
+    if (hardValue > 0) {
+      return `${hardValue} / ${sum}`;
+    }
+  }
+
+  return sum.toString();
+};
+
+/**
  * Determine the winner of a blackjack game
  */
 export const determineWinner = (

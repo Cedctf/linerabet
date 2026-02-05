@@ -103,8 +103,10 @@ pub struct ActiveGame {
     pub game_type: GameType,
     /// Current phase of the game
     pub phase: GamePhase,
-    /// Player's cards
-    pub player_hand: Vec<Card>,
+    /// Multiple player hands (for split support)
+    pub player_hands: Vec<Vec<Card>>,
+    /// Index of the hand currently being played
+    pub active_hand_index: u32,
     /// Dealer's visible cards (hole card hidden during PlayerTurn)
     pub dealer_hand: Vec<Card>,
     /// Dealer's hole card (revealed on Stand)
@@ -132,7 +134,7 @@ pub enum GamePhase {
 pub struct GameRecord {
     pub game_id: u64,
     pub game_type: GameType,
-    pub player_hand: Vec<Card>,
+    pub player_hands: Vec<Vec<Card>>,
     pub dealer_hand: Vec<Card>,
     pub bet: u64,
     pub result: GameResult,

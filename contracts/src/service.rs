@@ -139,15 +139,16 @@ struct CurrentGameObject {
     bet: u64,
     game_type: GameType,
     phase: GamePhase,
-    player_hand: Vec<CardObject>,
+    player_hands: Vec<Vec<CardObject>>,
+    active_hand_index: u32,
     dealer_hand: Vec<CardObject>,
-    player_value: u8,
+    player_values: Vec<u8>,
     dealer_value: u8,
 }
 
 impl From<ActiveGame> for CurrentGameObject {
     fn from(g: ActiveGame) -> Self {
-        let player_value = calculate_hand_value(&g.player_hand);
+        let player_values = g.player_hands.iter().map(|h| calculate_hand_value(h)).collect();
         let dealer_value = calculate_hand_value(&g.dealer_hand);
         CurrentGameObject {
             game_id: g.game_id,
@@ -155,9 +156,12 @@ impl From<ActiveGame> for CurrentGameObject {
             bet: g.bet,
             game_type: g.game_type,
             phase: g.phase,
-            player_hand: g.player_hand.into_iter().map(CardObject::from).collect(),
+            player_hands: g.player_hands.into_iter()
+                .map(|hand| hand.into_iter().map(CardObject::from).collect())
+                .collect(),
+            active_hand_index: g.active_hand_index,
             dealer_hand: g.dealer_hand.into_iter().map(CardObject::from).collect(),
-            player_value,
+            player_values,
             dealer_value,
         }
     }
@@ -184,7 +188,7 @@ impl From<Card> for CardObject {
 struct GameRecordObject {
     game_id: u64,
     game_type: GameType,
-    player_hand: Vec<CardObject>,
+    player_hands: Vec<Vec<CardObject>>,
     dealer_hand: Vec<CardObject>,
     bet: u64,
     result: GameResult,
@@ -241,7 +245,9 @@ impl From<GameRecord> for GameRecordObject {
         GameRecordObject {
             game_id: r.game_id,
             game_type: r.game_type,
-            player_hand: r.player_hand.into_iter().map(CardObject::from).collect(),
+            player_hands: r.player_hands.into_iter()
+                .map(|hand| hand.into_iter().map(CardObject::from).collect())
+                .collect(),
             dealer_hand: r.dealer_hand.into_iter().map(CardObject::from).collect(),
             bet: r.bet,
             result: r.result,
